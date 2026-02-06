@@ -15,38 +15,25 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
-from quiz.views import CourseListCreateView, CourseDetailView, QuizListCreateView, QuizDetailView, QuestionListCreateView, QuestionDetailView
-from user.views import StudentProfileView, InstructorProfileView, RegisterView
-from result.views import QuizResultView
+from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from quiz.views import ListCreateQuiz, QuizQuestionDetail, RetrieveUpdateDestroyQuiz, QuizQuestions
+
 
 
 urlpatterns = [
-    
     path('admin/', admin.site.urls),
-    
-        #course 
-    path('api/courses/', CourseListCreateView.as_view(), name='course-list'),
-    path('api/courses/<int:pk>/', CourseDetailView.as_view(), name='course-detail'),
-     
-        #quiz
-    path('api/quizzes/', QuizListCreateView.as_view(), name='quiz-list'),
-    path('api/quizzes/<int:pk>/', QuizDetailView.as_view(), name='quiz-detail'),
-     
-        #user profiles
-    path('api/student-profile/<int:pk>/', StudentProfileView.as_view(), name='student-profile'),
-    path('api/instructor-profile/<int:pk>/', InstructorProfileView.as_view(), name='instructor-profile'),
-    
-        #quiz results
-    path('api/quiz-results/', QuizResultView.as_view(), name='quiz-results'),
-
-        #authentication
+   # JWT Auth urls
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/register/', RegisterView.as_view(), name='register'),
 
-        #questions
-    path('api/questions/', QuestionListCreateView.as_view(), name='question-list'),
-    path('api/questions/<int:pk>/', QuestionDetailView.as_view(), name='question-detail'),
+    # Quiz app urls
+    path('api/quizzes/', ListCreateQuiz.as_view(), name='quiz_list'),
+    path('api/quizzes/<int:pk>/', RetrieveUpdateDestroyQuiz.as_view(), name='retrieve_update_destroy_quiz'),
+    path('api/quizzes/<int:quiz_id>/questions/', QuizQuestions.as_view(), name='questions'),
+    path('api/questions/<int:pk>/', QuizQuestionDetail.as_view(), name='quiz_question_detail'),
+
+    # Registration and authentication urls
+    path("/api/register/", include("dj_rest_auth.registration.urls")),
+    path("auth/", include("dj_rest_auth.urls")),
 ]
