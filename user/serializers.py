@@ -1,36 +1,77 @@
-from email.headerregistry import Group
+from django.contrib.auth.models import Group, User
 from .models import *
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from dj_rest_auth.registration.serializers import RegisterSerializer
 import uuid
-from django.contrib.auth.hashers import make_password
+
 
 class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentProfile
-        fields = '__all__'
+        fields = "__all__"
+
 
 class InstructorProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = InstructorProfile
-        fields = '__all__'
+        fields = "__all__"
 
-class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=6)
-    role = serializers.ChoiceField(choices=['student', 'teacher'], write_only=True)
+
+class CurrentUserSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "password", "role"]
+        fields = ("id", "username", "email", "role")
 
-    def create(self, validated_data):
-        role = validated_data.pop("role", "student")
-        
-        user = User.objects.create(
-            username=validated_data["username"],
-            email=validated_data.get("email", ""),
-            password=make_password(validated_data["password"])
-        )
-        
+    def get_role(self, obj):
+        if hasattr(obj, "instructorprofile"):
+            return "teacher"
+        if hasattr(obj, "studentprofile"):
+            return "student"
+        if obj.is_staff or obj.groups.filter(name="Teachers").exists():
+            return "teacher"
+        return "student"
+
+
+class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
+    role = serializers.CharField(required=False)
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        role = (self.initial_data.get("role") or "").strip().lower()
+        user = self.user
+
+        if role == "teacher":
+            if not (
+                hasattr(user, "instructorprofile")
+                or user.is_staff
+                or user.groups.filter(name="Teachers").exists()
+            ):
+                raise serializers.ValidationError({"detail": "User is not a teacher."})
+        if role == "student":
+            if not hasattr(user, "studentprofile"):
+                raise serializers.ValidationError({"detail": "User is not a student."})
+
+        return data
+
+
+class CustomRegisterSerializer(RegisterSerializer):
+    role = serializers.ChoiceField(choices=["student", "teacher"], required=False)
+    full_name = serializers.CharField(required=False)
+
+    def get_cleaned_data(self):
+        data = super().get_cleaned_data()
+        data["role"] = self.validated_data.get("role", "student")
+        data["full_name"] = self.validated_data.get("full_name", "")
+        return data
+
+    def save(self, request):
+        user = super().save(request)
+        role = self.cleaned_data["role"]
+        full_name = self.cleaned_data["full_name"]
+
         if role == "teacher":
             teacher_group, _ = Group.objects.get_or_create(name="Teachers")
             user.groups.add(teacher_group)
@@ -38,7 +79,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             user.save()
             InstructorProfile.objects.create(
                 user=user,
-                instructor_id=f"INSTR_{uuid.uuid4().hex[:8].upper()}"
+                instructor_id=f"INSTR_{uuid.uuid4().hex[:8].upper()}",
+                full_name=full_name,
             )
         else:
             student_group, _ = Group.objects.get_or_create(name="Students")
@@ -46,7 +88,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             user.save()
             StudentProfile.objects.create(
                 user=user,
-                student_id=f"STU_{uuid.uuid4().hex[:8].upper()}"
+                student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
+                full_name=full_name,
             )
-        
+
         return user

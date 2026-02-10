@@ -16,24 +16,45 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from quiz.views import ListCreateQuiz, QuizQuestionDetail, RetrieveUpdateDestroyQuiz, QuizQuestions
-
+from rest_framework_simplejwt.views import TokenRefreshView
+from quiz.views import (
+    ListCreateQuiz,
+    QuizQuestionDetail,
+    RetrieveUpdateDestroyQuiz,
+    QuizQuestions,
+)
+from user.views import RegisterView, CurrentUserView, RoleTokenObtainPairView
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-   # JWT Auth urls
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path("admin/", admin.site.urls),
+    # JWT Auth urls
+    path("api/token/", RoleTokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+
+    # User / auth-related custom endpoints
+    path("api/register/", RegisterView.as_view(), name="register"),
+    path("api/users/me/", CurrentUserView.as_view(), name="current_user"),
 
     # Quiz app urls
-    path('api/quizzes/', ListCreateQuiz.as_view(), name='quiz_list'),
-    path('api/quizzes/<int:pk>/', RetrieveUpdateDestroyQuiz.as_view(), name='retrieve_update_destroy_quiz'),
-    path('api/quizzes/<int:quiz_id>/questions/', QuizQuestions.as_view(), name='questions'),
-    path('api/questions/<int:pk>/', QuizQuestionDetail.as_view(), name='quiz_question_detail'),
+    path("api/quizzes/", ListCreateQuiz.as_view(), name="quiz_list"),
+    path(
+        "api/quizzes/<int:pk>/",
+        RetrieveUpdateDestroyQuiz.as_view(),
+        name="retrieve_update_destroy_quiz",
+    ),
+    path(
+        "api/quizzes/<int:quiz_id>/questions/",
+        QuizQuestions.as_view(),
+        name="questions",
+    ),
+    path(
+        "api/questions/<int:pk>/",
+        QuizQuestionDetail.as_view(),
+        name="quiz_question_detail",
+    ),
 
-    # Registration and authentication urls
-    path("/api/register/", include("dj_rest_auth.registration.urls")),
-    path("auth/", include("dj_rest_auth.urls")),
+    # dj-rest-auth
+    path("dj-rest-auth/registration/", include("dj_rest_auth.registration.urls")),
+    path("dj-rest-auth/", include("dj_rest_auth.urls")),
 ]

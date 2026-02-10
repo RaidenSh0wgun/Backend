@@ -1,5 +1,5 @@
 #!/bin/sh
-'''exec' "/home/mark/Documents/Activity/Full Stack/OQES_Finals/Backend(new)/venv/bin/python3" "$0" "$@"
+'''exec' "/home/mark/Documents/Activities/Activity/Full Stack/Backend/venv/bin/python3" "$0" "$@"
 ' '''
 # -*- coding: utf-8 -*-
 import re
