@@ -17,13 +17,22 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
+
 from quiz.views import (
     ListCreateQuiz,
     QuizQuestionDetail,
     RetrieveUpdateDestroyQuiz,
     QuizQuestions,
+    SubmitQuiz,
 )
 from user.views import RegisterView, CurrentUserView, RoleTokenObtainPairView
+from course.views import (
+    CourseListCreate,
+    CourseRetrieveUpdateDestroy,
+    CourseList,
+    CourseDetail,
+    EnrollCourseView,
+)
 
 
 urlpatterns = [
@@ -52,6 +61,34 @@ urlpatterns = [
         "api/questions/<int:pk>/",
         QuizQuestionDetail.as_view(),
         name="quiz_question_detail",
+    ),
+    path(
+        "api/quizzes/<int:quiz_id>/submit/",
+        SubmitQuiz.as_view(),
+        name="quiz_submit",
+    ),
+
+    # Course
+    path("api/courses/", CourseListCreate.as_view(), name="course_list_create"),
+    path(
+        "api/courses/<int:pk>/",
+        CourseRetrieveUpdateDestroy.as_view(),
+        name="course_retrieve_update_destroy",
+    ),
+    path(
+        "api/courses/my/",
+        CourseList.as_view(),
+        name="course_list",
+    ),
+    path(
+        "api/courses/<int:pk>/detail/",
+        CourseDetail.as_view(),
+        name="course_detail",
+    ),
+    path(
+        "api/courses/<int:pk>/enroll/",
+        EnrollCourseView.as_view(),
+        name="course_enroll",
     ),
 
     # dj-rest-auth

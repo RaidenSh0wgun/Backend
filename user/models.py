@@ -1,6 +1,5 @@
 from django.db import models
 from django.contrib.auth.models import User
-from quiz.models import Course
 from django.utils.translation import gettext_lazy as _
 from django.dispatch import receiver
 from django.db.models.signals import post_save
@@ -10,7 +9,9 @@ class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='studentprofile')
     bio = models.TextField(blank=True)
     student_id = models.CharField(max_length=20, unique=True)
-    enrolled_courses = models.ManyToManyField(Course, related_name='students', blank=False)
+    enrolled_courses = models.ManyToManyField(
+        "course.Course", related_name="students", blank=False
+    )
     full_name = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
@@ -21,7 +22,9 @@ class InstructorProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='instructorprofile')
     instructor_id = models.CharField(max_length=20, unique=True)
     department = models.CharField(max_length=100, blank=True)
-    assigned_courses = models.ManyToManyField(Course, related_name='instructors', blank=False)
+    assigned_courses = models.ManyToManyField(
+        "course.Course", related_name="instructors", blank=False
+    )
     full_name = models.CharField(max_length=255, blank=True)
 
     def __str__(self):

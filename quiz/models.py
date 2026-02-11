@@ -6,32 +6,42 @@ from autoslug import AutoSlugField
 
 # Create your models here.
 class Quiz(models.Model):
-    author = models.CharField(_("Author"), max_length=50, blank=True)
-    title = models.CharField(_("Quiz Title"), max_length=100, unique=True, default="New Quiz")
+    author = models.ForeignKey(
+        "user.InstructorProfile",
+        on_delete=models.CASCADE,
+        related_name="quizzes",
+        null=True,
+        blank=True,
+    )
+    course = models.ForeignKey(
+        "course.Course",
+        on_delete=models.CASCADE,
+        related_name="quizzes",
+        null=True,
+        blank=True,
+    )
+    title = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    duration_minutes = models.PositiveIntegerField(default=10)
     created_at = models.DateTimeField(auto_now_add=True)
-
-    @property
-    def question_count(self):
-        return self.questions.count()  
-    
-    class Meta:
-        verbose_name = _("Quiz")
-        verbose_name_plural = _("Quizzes")  
-        ordering = ["id"]
 
 class Question(models.Model):
+    TYPE_IDENTIFICATION = "identification"
+    TYPE_MULTIPLE_CHOICE = "mcq"
+    TYPE_TRUE_FALSE = "tf"
+
+    TYPE_CHOICES = [
+        (TYPE_IDENTIFICATION, "Identification"),
+        (TYPE_MULTIPLE_CHOICE, "Multiple choice"),
+        (TYPE_TRUE_FALSE, "True or false"),
+    ]
+
     quiz = models.ForeignKey(Quiz, related_name="questions", on_delete=models.CASCADE)
-    title = models.CharField(max_length=200, default="")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = _("Question")
-        verbose_name_plural = _("Questions")
-        ordering = ["id"]
-
-    def __str__(self):
-        return self.title
+    text = models.CharField(max_length=255, null=True, blank=True)
+    question_type = models.CharField(
+        max_length=20, choices=TYPE_CHOICES, default=TYPE_MULTIPLE_CHOICE
+    )
+    correct_text = models.CharField(max_length=255, blank=True)
         
 class Answer(models.Model):
     Question = models.ForeignKey(Question, related_name="answers", on_delete=models.CASCADE)
@@ -47,8 +57,30 @@ class Answer(models.Model):
 
     def __str__(self):
         return self.answer_text
-        
-class Course(models.Model):
-    name = models.CharField(max_length=100, null=True, blank=False, unique=True)
-    description = models.TextField()
-    
+
+
+class QuizAttempt(models.Model):
+    """
+    Tracks a student's submission for a quiz.
+    A student can only have one attempt per quiz.
+    """
+
+    student = models.ForeignKey(
+        "user.StudentProfile",
+        on_delete=models.CASCADE,
+        related_name="quiz_attempts",
+    )
+    quiz = models.ForeignKey(
+        Quiz,
+        on_delete=models.CASCADE,
+        related_name="attempts",
+    )
+    score = models.PositiveIntegerField(default=0)
+    total = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("student", "quiz")
+
+    def __str__(self):
+        return f"{self.student} - {self.quiz} ({self.score}/{self.total})"

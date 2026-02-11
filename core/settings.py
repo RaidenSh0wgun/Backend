@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     # Local apps
     "user",
     "quiz",
+    "course",
 
     # Dependency apps for authentication
     "rest_framework",
