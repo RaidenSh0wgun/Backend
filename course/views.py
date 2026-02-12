@@ -33,14 +33,6 @@ class CourseRetrieveUpdateDestroy(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """
-        Allow retrieving any course by ID so that even legacy courses
-        without an author set (or authored by another teacher) can be
-        deleted or inspected.
-
-        Actual permission checks for updating/deleting are handled in
-        perform_update / perform_destroy.
-        """
         return Course.objects.all()
 
     def perform_update(self, serializer):
@@ -51,9 +43,6 @@ class CourseRetrieveUpdateDestroy(generics.RetrieveUpdateDestroyAPIView):
         serializer.save(author=instructor)
 
     def perform_destroy(self, instance):
-        """
-        Only teachers (or staff) are allowed to delete courses.
-        """
         user = self.request.user
         if not (hasattr(user, "instructorprofile") or user.is_staff):
             raise PermissionDenied("Only teachers can delete courses.")

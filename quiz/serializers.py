@@ -58,12 +58,6 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
 class QuizSerializer(serializers.ModelSerializer):
-    """
-    Quiz representation used in list views.
-    Includes a flag indicating whether the current student
-    has already attempted this quiz.
-    """
-
     question_count = serializers.SerializerMethodField()
     has_attempted = serializers.SerializerMethodField()
 

@@ -14,15 +14,10 @@ from .serializers import (
 
 
 class ListCreateQuiz(generics.ListCreateAPIView):
-    """
-    List quizzes or create a new quiz with nested questions.
-    """
-
     queryset = Quiz.objects.all()
     permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
-        # Use a simpler serializer for listing, and a nested one for creation.
         if self.request.method == "POST":
             return QuizCreateUpdateSerializer
         return QuizSerializer
@@ -30,7 +25,6 @@ class ListCreateQuiz(generics.ListCreateAPIView):
     def get_queryset(self):
         qs = super().get_queryset()
 
-        # Optional filter by course from query params.
         course_id = self.request.query_params.get("course")
         if course_id:
             qs = qs.filter(course_id=course_id)
@@ -139,7 +133,6 @@ class SubmitQuiz(APIView):
 
         student = user.studentprofile
 
-        # Prevent multiple attempts for the same quiz by the same student.
         if QuizAttempt.objects.filter(student=student, quiz=quiz).exists():
             return Response(
                 {"detail": "You have already completed this quiz."},

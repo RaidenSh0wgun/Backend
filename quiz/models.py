@@ -60,11 +60,6 @@ class Answer(models.Model):
 
 
 class QuizAttempt(models.Model):
-    """
-    Tracks a student's submission for a quiz.
-    A student can only have one attempt per quiz.
-    """
-
     student = models.ForeignKey(
         "user.StudentProfile",
         on_delete=models.CASCADE,
