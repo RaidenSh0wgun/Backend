@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Quiz, Question, Answer
+from .models import Quiz, Question, Answer, QuizAttempt
 
 
 class AnswerSerializer(serializers.ModelSerializer):
@@ -31,7 +31,9 @@ class QuestionSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        choices_data = validated_data.pop("answers", [])
+        # Because `choices` uses `source="answers"`, DRF stores the validated
+        # nested payload under the source key (`answers`) in `validated_data`.
+        choices_data = validated_data.pop("answers", validated_data.pop("choices", []))
         question = Question.objects.create(**validated_data)
 
         for choice_data in choices_data:
@@ -48,13 +50,22 @@ class QuestionSerializer(serializers.ModelSerializer):
             "correct_text", instance.correct_text
         )
 
-        choices_data = validated_data.pop("answers", [])
+        choices_data = validated_data.pop("answers", validated_data.pop("choices", []))
         instance.answers.all().delete()
         for choice_data in choices_data:
             Answer.objects.create(Question=instance, **choice_data)
 
         instance.save()
         return instance
+
+
+class QuizAttemptSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source="student.full_name", read_only=True)
+    username = serializers.CharField(source="student.user.username", read_only=True)
+
+    class Meta:
+        model = QuizAttempt
+        fields = ["id", "student", "student_name", "username", "score", "total", "created_at"]
 
 
 class QuizSerializer(serializers.ModelSerializer):
@@ -69,6 +80,7 @@ class QuizSerializer(serializers.ModelSerializer):
             "description",
             "duration_minutes",
             "course",
+            "due_date",
             "created_at",
             "question_count",
             "has_attempted",
@@ -111,6 +123,7 @@ class QuizCreateUpdateSerializer(serializers.ModelSerializer):
             "description",
             "duration_minutes",
             "course",
+            "due_date",
             "questions",
         ]
         read_only_fields = ["id"]
@@ -138,6 +151,7 @@ class QuizCreateUpdateSerializer(serializers.ModelSerializer):
             "duration_minutes", instance.duration_minutes
         )
         instance.course = validated_data.get("course", instance.course)
+        instance.due_date = validated_data.get("due_date", instance.due_date)
         instance.save()
 
         if questions_data is None:

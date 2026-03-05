@@ -10,6 +10,7 @@ from .serializers import (
     QuizDetailSerializer,
     QuizCreateUpdateSerializer,
     QuestionSerializer,
+    QuizAttemptSerializer,
 )
 
 
@@ -166,3 +167,35 @@ class SubmitQuiz(APIView):
         )
 
         return Response({"score": attempt.score, "total": attempt.total})
+
+
+class QuizAttemptsView(APIView):
+    """List all attempts (scores) for a quiz. Instructor only."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, quiz_id, format=None):
+        if not hasattr(request.user, "instructorprofile"):
+            raise PermissionDenied("Only instructors can view quiz scores.")
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+        if quiz.author and quiz.author.user != request.user:
+            raise PermissionDenied("You can only view scores for your own quizzes.")
+        attempts = quiz.attempts.select_related("student", "student__user").all().order_by("-created_at")
+        serializer = QuizAttemptSerializer(attempts, many=True)
+        return Response(serializer.data)
+
+
+class PendingQuizzesView(APIView):
+    """List quizzes the current student has not attempted yet (from enrolled courses)."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, format=None):
+        if not hasattr(request.user, "studentprofile"):
+            raise PermissionDenied("Only students can view pending quizzes.")
+        student = request.user.studentprofile
+        enrolled_course_ids = student.enrolled_courses.values_list("id", flat=True)
+        attempted_quiz_ids = QuizAttempt.objects.filter(student=student).values_list("quiz_id", flat=True)
+        quizzes = Quiz.objects.filter(
+            course_id__in=enrolled_course_ids
+        ).exclude(id__in=attempted_quiz_ids).select_related("course").order_by("due_date")
+        serializer = QuizSerializer(quizzes, many=True, context={"request": request})
+        return Response(serializer.data)

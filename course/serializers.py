@@ -1,5 +1,14 @@
 from rest_framework import serializers
 from .models import Course
+from user.models import StudentProfile
+
+
+class EnrolledStudentSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+
+    class Meta:
+        model = StudentProfile
+        fields = ["id", "user", "username", "full_name", "student_id"]
 
 
 class CourseSerializer(serializers.ModelSerializer):

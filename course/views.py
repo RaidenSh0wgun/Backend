@@ -3,8 +3,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
-from .serializers import CourseSerializer
+from .serializers import CourseSerializer, EnrolledStudentSerializer
 from .models import Course
 
 
@@ -61,6 +60,19 @@ class CourseList(generics.ListAPIView):
         return Course.objects.all()
 
 
+class EnrolledCoursesList(APIView):
+    """List courses the current student is enrolled in."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, format=None):
+        if not hasattr(request.user, "studentprofile"):
+            return Response([])
+        student = request.user.studentprofile
+        courses = student.enrolled_courses.all().order_by("title")
+        serializer = CourseSerializer(courses, many=True, context={"request": request})
+        return Response(serializer.data)
+
+
 class CourseDetail(generics.RetrieveAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
@@ -84,6 +96,28 @@ class EnrollCourseView(APIView):
         student = request.user.studentprofile
         student.enrolled_courses.add(course)
 
+        # Sync existing quiz deadlines into the student's calendar on enroll
+        try:
+            from event.models import CalendarEvent
+        except Exception:
+            CalendarEvent = None
+
+        if CalendarEvent is not None:
+            quizzes = course.quizzes.filter(due_date__isnull=False)
+            for quiz in quizzes:
+                CalendarEvent.objects.update_or_create(
+                    user=request.user,
+                    related_quiz=quiz,
+                    defaults={
+                        "title": f"Quiz: {quiz.title}",
+                        "description": quiz.description or "",
+                        "start": quiz.due_date,
+                        "end": quiz.due_date,
+                        "event_type": "quiz_due",
+                        "related_course": course,
+                    },
+                )
+
         serializer = CourseSerializer(course, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -95,5 +129,31 @@ class EnrollCourseView(APIView):
         student = request.user.studentprofile
         student.enrolled_courses.remove(course)
 
+        # Remove calendar events for quizzes in this course on unenroll
+        try:
+            from event.models import CalendarEvent
+        except Exception:
+            CalendarEvent = None
+
+        if CalendarEvent is not None:
+            CalendarEvent.objects.filter(
+                user=request.user, related_course=course, event_type="quiz_due"
+            ).delete()
+
         serializer = CourseSerializer(course, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CourseEnrolledStudentsView(APIView):
+    """List students enrolled in a course. Instructor only."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, pk, format=None):
+        if not hasattr(request.user, "instructorprofile"):
+            raise PermissionDenied("Only instructors can view enrolled students.")
+        course = get_object_or_404(Course, pk=pk)
+        if course.author and course.author.user != request.user:
+            raise PermissionDenied("You can only view students for your own courses.")
+        students = course.students.all().order_by("user__username")
+        serializer = EnrolledStudentSerializer(students, many=True)
+        return Response(serializer.data)

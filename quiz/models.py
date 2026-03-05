@@ -20,10 +20,14 @@ class Quiz(models.Model):
         null=True,
         blank=True,
     )
-    title = models.CharField(max_length=100, unique=True)
+    title = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     duration_minutes = models.PositiveIntegerField(default=10)
+    due_date = models.DateTimeField(null=True, blank=True, help_text="Quiz deadline for calendar")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [["course", "title"]]
 
 class Question(models.Model):
     TYPE_IDENTIFICATION = "identification"

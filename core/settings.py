@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "user",
     "quiz",
     "course",
+    "event",
 
     # Dependency apps for authentication
     "rest_framework",

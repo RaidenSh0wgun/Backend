@@ -24,14 +24,19 @@ from quiz.views import (
     RetrieveUpdateDestroyQuiz,
     QuizQuestions,
     SubmitQuiz,
+    QuizAttemptsView,
+    PendingQuizzesView,
 )
 from user.views import RegisterView, CurrentUserView, RoleTokenObtainPairView
+from event.views import MyCalendarView
 from course.views import (
     CourseListCreate,
     CourseRetrieveUpdateDestroy,
     CourseList,
     CourseDetail,
     EnrollCourseView,
+    CourseEnrolledStudentsView,
+    EnrolledCoursesList,
 )
 
 
@@ -47,49 +52,24 @@ urlpatterns = [
 
     # Quiz app urls
     path("api/quizzes/", ListCreateQuiz.as_view(), name="quiz_list"),
-    path(
-        "api/quizzes/<int:pk>/",
-        RetrieveUpdateDestroyQuiz.as_view(),
-        name="retrieve_update_destroy_quiz",
-    ),
-    path(
-        "api/quizzes/<int:quiz_id>/questions/",
-        QuizQuestions.as_view(),
-        name="questions",
-    ),
-    path(
-        "api/questions/<int:pk>/",
-        QuizQuestionDetail.as_view(),
-        name="quiz_question_detail",
-    ),
-    path(
-        "api/quizzes/<int:quiz_id>/submit/",
-        SubmitQuiz.as_view(),
-        name="quiz_submit",
-    ),
+    path("api/quizzes/pending/", PendingQuizzesView.as_view(), name="pending_quizzes"),
+    path("api/quizzes/<int:pk>/", RetrieveUpdateDestroyQuiz.as_view(), name="retrieve_update_destroy_quiz",),
+    path("api/quizzes/<int:quiz_id>/attempts/", QuizAttemptsView.as_view(), name="quiz_attempts",),
+    path("api/quizzes/<int:quiz_id>/questions/", QuizQuestions.as_view(), name="questions",),
+    path("api/questions/<int:pk>/", QuizQuestionDetail.as_view(), name="quiz_question_detail",),
+    path("api/quizzes/<int:quiz_id>/submit/", SubmitQuiz.as_view(), name="quiz_submit",),
 
     # Course
     path("api/courses/", CourseListCreate.as_view(), name="course_list_create"),
-    path(
-        "api/courses/<int:pk>/",
-        CourseRetrieveUpdateDestroy.as_view(),
-        name="course_retrieve_update_destroy",
-    ),
-    path(
-        "api/courses/my/",
-        CourseList.as_view(),
-        name="course_list",
-    ),
-    path(
-        "api/courses/<int:pk>/detail/",
-        CourseDetail.as_view(),
-        name="course_detail",
-    ),
-    path(
-        "api/courses/<int:pk>/enroll/",
-        EnrollCourseView.as_view(),
-        name="course_enroll",
-    ),
+    path("api/courses/<int:pk>/", CourseRetrieveUpdateDestroy.as_view(), name="course_retrieve_update_destroy",),
+    path("api/courses/my/", CourseList.as_view(), name="course_list",),
+    path("api/courses/enrolled/", EnrolledCoursesList.as_view(), name="enrolled_courses",),
+    path("api/courses/<int:pk>/detail/", CourseDetail.as_view(), name="course_detail",),
+    path("api/courses/<int:pk>/enroll/", EnrollCourseView.as_view(), name="course_enroll",),
+    path("api/courses/<int:pk>/students/", CourseEnrolledStudentsView.as_view(), name="course_enrolled_students",),
+
+    # Calendar (events)
+    path("api/events/", MyCalendarView.as_view(), name="my_calendar"),
 
     # dj-rest-auth
     path("dj-rest-auth/registration/", include("dj_rest_auth.registration.urls")),
