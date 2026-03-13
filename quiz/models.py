@@ -23,6 +23,7 @@ class Quiz(models.Model):
     title = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     duration_minutes = models.PositiveIntegerField(default=10)
+    is_active = models.BooleanField(default=True, help_text="Whether students can take this quiz")
     due_date = models.DateTimeField(null=True, blank=True, help_text="Quiz deadline for calendar")
     created_at = models.DateTimeField(auto_now_add=True)
 
