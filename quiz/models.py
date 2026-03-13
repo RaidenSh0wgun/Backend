@@ -77,10 +77,19 @@ class QuizAttempt(models.Model):
     )
     score = models.PositiveIntegerField(default=0)
     total = models.PositiveIntegerField(default=0)
+    answers = models.JSONField(default=dict, blank=True, help_text="Store selected answer IDs per question")
+    score_override = models.PositiveIntegerField(null=True, blank=True, help_text="Manual override for score")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ("student", "quiz")
 
+    @property
+    def effective_score(self):
+        """Return override score if set, otherwise auto-calculated score"""
+        if self.score_override is not None:
+            return self.score_override
+        return self.score
+
     def __str__(self):
-        return f"{self.student} - {self.quiz} ({self.score}/{self.total})"
+        return f"{self.student} - {self.quiz} ({self.effective_score}/{self.total})"

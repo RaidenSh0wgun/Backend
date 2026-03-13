@@ -62,10 +62,26 @@ class QuestionSerializer(serializers.ModelSerializer):
 class QuizAttemptSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source="student.full_name", read_only=True)
     username = serializers.CharField(source="student.user.username", read_only=True)
+    effective_score = serializers.ReadOnlyField()
 
     class Meta:
         model = QuizAttempt
-        fields = ["id", "student", "student_name", "username", "score", "total", "created_at"]
+        fields = [
+            "id",
+            "student",
+            "student_name",
+            "username",
+            "score",
+            "total",
+            "answers",
+            "score_override",
+            "effective_score",
+            "created_at",
+        ]
+        extra_kwargs = {
+            "score_override": {"required": False, "allow_null": True},
+            "answers": {"required": False},
+        }
 
 
 class QuizSerializer(serializers.ModelSerializer):

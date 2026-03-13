@@ -25,6 +25,7 @@ from quiz.views import (
     QuizQuestions,
     SubmitQuiz,
     QuizAttemptsView,
+    QuizAttemptDetail,
     PendingQuizzesView,
 )
 from user.views import RegisterView, CurrentUserView, RoleTokenObtainPairView
@@ -55,6 +56,7 @@ urlpatterns = [
     path("api/quizzes/pending/", PendingQuizzesView.as_view(), name="pending_quizzes"),
     path("api/quizzes/<int:pk>/", RetrieveUpdateDestroyQuiz.as_view(), name="retrieve_update_destroy_quiz",),
     path("api/quizzes/<int:quiz_id>/attempts/", QuizAttemptsView.as_view(), name="quiz_attempts",),
+    path("api/quizzes/<int:quiz_id>/attempts/<int:attempt_id>/", QuizAttemptDetail.as_view(), name="quiz_attempt_detail",),
     path("api/quizzes/<int:quiz_id>/questions/", QuizQuestions.as_view(), name="questions",),
     path("api/questions/<int:pk>/", QuizQuestionDetail.as_view(), name="quiz_question_detail",),
     path("api/quizzes/<int:quiz_id>/submit/", SubmitQuiz.as_view(), name="quiz_submit",),

@@ -164,6 +164,7 @@ class SubmitQuiz(APIView):
             quiz=quiz,
             score=score,
             total=total_questions,
+            answers=answers_map,
         )
 
         return Response({"score": attempt.score, "total": attempt.total})
@@ -182,6 +183,36 @@ class QuizAttemptsView(APIView):
         attempts = quiz.attempts.select_related("student", "student__user").all().order_by("-created_at")
         serializer = QuizAttemptSerializer(attempts, many=True)
         return Response(serializer.data)
+
+
+class QuizAttemptDetail(APIView):
+    """Retrieve or update a single quiz attempt. Instructor only."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self, quiz_id, attempt_id):
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+        if quiz.author and quiz.author.user != self.request.user:
+            raise PermissionDenied("You can only view attempts for your own quizzes.")
+        return get_object_or_404(quiz.attempts, id=attempt_id)
+
+    def get(self, request, quiz_id, attempt_id, format=None):
+        if not hasattr(request.user, "instructorprofile"):
+            raise PermissionDenied("Only instructors can view quiz attempts.")
+        attempt = self.get_object(quiz_id, attempt_id)
+        serializer = QuizAttemptSerializer(attempt)
+        return Response(serializer.data)
+
+    def patch(self, request, quiz_id, attempt_id, format=None):
+        if not hasattr(request.user, "instructorprofile"):
+            raise PermissionDenied("Only instructors can update quiz attempts.")
+        attempt = self.get_object(quiz_id, attempt_id)
+        serializer = QuizAttemptSerializer(
+            attempt, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PendingQuizzesView(APIView):
