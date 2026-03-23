@@ -171,33 +171,57 @@ class SubmitQuiz(APIView):
 
 
 class QuizAttemptsView(APIView):
-    """List all attempts (scores) for a quiz. Instructor only."""
+    """List quiz attempts (scores) for a quiz.
+
+    - Instructors can view all attempts for quizzes they created.
+    - Students can view only their own attempt.
+    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, quiz_id, format=None):
-        if not hasattr(request.user, "instructorprofile"):
-            raise PermissionDenied("Only instructors can view quiz scores.")
         quiz = get_object_or_404(Quiz, id=quiz_id)
-        if quiz.author and quiz.author.user != request.user:
-            raise PermissionDenied("You can only view scores for your own quizzes.")
-        attempts = quiz.attempts.select_related("student", "student__user").all().order_by("-created_at")
+
+        if hasattr(request.user, "instructorprofile"):
+            if quiz.author and quiz.author.user != request.user:
+                raise PermissionDenied("You can only view scores for your own quizzes.")
+            attempts = quiz.attempts.select_related("student", "student__user").all().order_by("-created_at")
+        elif hasattr(request.user, "studentprofile"):
+            student = request.user.studentprofile
+            attempts = (
+                quiz.attempts.filter(student=student)
+                .select_related("student", "student__user")
+                .order_by("-created_at")
+            )
+        else:
+            raise PermissionDenied("Only authenticated users can view quiz attempts.")
+
         serializer = QuizAttemptSerializer(attempts, many=True)
         return Response(serializer.data)
 
 
 class QuizAttemptDetail(APIView):
-    """Retrieve or update a single quiz attempt. Instructor only."""
+    """Retrieve or update a single quiz attempt.
+
+    - Instructors can view any attempt for their quizzes.
+    - Students can view their own attempt.
+    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self, quiz_id, attempt_id):
         quiz = get_object_or_404(Quiz, id=quiz_id)
-        if quiz.author and quiz.author.user != self.request.user:
-            raise PermissionDenied("You can only view attempts for your own quizzes.")
-        return get_object_or_404(quiz.attempts, id=attempt_id)
+
+        if hasattr(self.request.user, "instructorprofile"):
+            if quiz.author and quiz.author.user != self.request.user:
+                raise PermissionDenied("You can only view attempts for your own quizzes.")
+            return get_object_or_404(quiz.attempts, id=attempt_id)
+
+        if hasattr(self.request.user, "studentprofile"):
+            student = self.request.user.studentprofile
+            return get_object_or_404(quiz.attempts, id=attempt_id, student=student)
+
+        raise PermissionDenied("Only authenticated users can view quiz attempts.")
 
     def get(self, request, quiz_id, attempt_id, format=None):
-        if not hasattr(request.user, "instructorprofile"):
-            raise PermissionDenied("Only instructors can view quiz attempts.")
         attempt = self.get_object(quiz_id, attempt_id)
         serializer = QuizAttemptSerializer(attempt)
         return Response(serializer.data)
