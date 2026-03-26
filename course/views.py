@@ -13,9 +13,7 @@ class CourseListCreate(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, "instructorprofile"):
-            return Course.objects.filter(author__user=user)
+        # All authenticated users can view all courses in the "All Courses" tab.
         return Course.objects.all()
 
     def perform_create(self, serializer):
@@ -57,6 +55,10 @@ class CourseList(generics.ListAPIView):
         user = self.request.user
         if hasattr(user, "instructorprofile"):
             return Course.objects.filter(author__user=user)
+
+        if hasattr(user, "studentprofile"):
+            return user.studentprofile.enrolled_courses.all().order_by("title")
+
         return Course.objects.all()
 
 
@@ -79,9 +81,7 @@ class CourseDetail(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        if hasattr(user, "instructorprofile"):
-            return Course.objects.filter(author__user=user)
+        # Allow any authenticated user to view any course (for all-courses view and details)
         return Course.objects.all()
 
 
