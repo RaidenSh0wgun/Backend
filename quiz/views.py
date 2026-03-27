@@ -3,6 +3,9 @@ from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
+from django.core.cache import cache
+from django.utils import timezone
+from datetime import datetime
 
 from .models import Quiz, Question, Answer, QuizAttempt
 from .serializers import (
@@ -145,10 +148,32 @@ class SubmitQuiz(APIView):
 
         score = 0
         for question in questions:
-            selected_answer_id = answers_map.get(str(question.id)) or answers_map.get(
+            submitted_value = answers_map.get(str(question.id)) or answers_map.get(
                 question.id
             )
-            if not selected_answer_id:
+            if submitted_value is None or submitted_value == "":
+                continue
+
+            if question.question_type == "identification":
+                correct = (question.correct_text or "").strip()
+                submitted_text = str(submitted_value).strip()
+                if not correct and hasattr(question, "answers"):
+                    correct = (
+                        question.answers.filter(is_correct=True)
+                        .values_list("answer_text", flat=True)
+                        .first()
+                        or ""
+                    ).strip()
+
+                if correct and submitted_text.casefold() == correct.casefold():
+                    score += 1
+                continue
+
+            # Multiple choice and True/False are scored by which answer option
+            # the student selected (via answer id).
+            try:
+                selected_answer_id = int(submitted_value)
+            except (TypeError, ValueError):
                 continue
 
             try:
@@ -167,7 +192,46 @@ class SubmitQuiz(APIView):
             answers=answers_map,
         )
 
+        # Clear in-progress timer when attempt is submitted.
+        cache.delete(f"quiz_timer_start_{student.id}_{quiz.id}")
+
         return Response({"score": attempt.score, "total": attempt.total})
+
+
+class QuizTimerView(APIView):
+    """Server-backed quiz timer (doesn't reset when navigating away)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, quiz_id, format=None):
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+
+        if not hasattr(request.user, "studentprofile"):
+            raise PermissionDenied("Only students can take quiz timers.")
+
+        student = request.user.studentprofile
+
+        cache_key = f"quiz_timer_start_{student.id}_{quiz.id}"
+        start_ts = cache.get(cache_key)
+        now_ts = timezone.now().timestamp()
+
+        if start_ts is None:
+            start_ts = now_ts
+            # Keep the timer around longer than quiz duration.
+            timeout = quiz.duration_minutes * 60 + 60 * 24
+            cache.set(cache_key, start_ts, timeout=timeout)
+
+        elapsed = now_ts - float(start_ts)
+        remaining_seconds = int(max(0, (quiz.duration_minutes * 60) - elapsed))
+
+        return Response(
+            {
+                "started_at": datetime.fromtimestamp(
+                    float(start_ts), tz=timezone.utc
+                ).isoformat(),
+                "remaining_seconds": remaining_seconds,
+            }
+        )
 
 
 class QuizAttemptsView(APIView):
@@ -252,5 +316,64 @@ class PendingQuizzesView(APIView):
         quizzes = Quiz.objects.filter(
             course_id__in=enrolled_course_ids
         ).exclude(id__in=attempted_quiz_ids).select_related("course").order_by("due_date")
+        serializer = QuizSerializer(quizzes, many=True, context={"request": request})
+        return Response(serializer.data)
+
+
+class QuizViewDetail(APIView):
+    """Quiz landing page data.
+
+    Used by the student/teacher `quizview` screen:
+    - quiz details (title/description/duration/question_count/has_attempted)
+    - current student's attempt score (if the viewer is a student and has attempted)
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, quiz_id, format=None):
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+
+        quiz_data = QuizSerializer(quiz, context={"request": request}).data
+
+        attempt_payload = None
+        if hasattr(request.user, "studentprofile"):
+            student = request.user.studentprofile
+            attempt = (
+                quiz.attempts.filter(student=student).order_by("-created_at").first()
+            )
+            if attempt:
+                attempt_payload = {
+                    "id": attempt.id,
+                    "score": attempt.score,
+                    "total": attempt.total,
+                    "effective_score": attempt.effective_score,
+                    "created_at": attempt.created_at,
+                }
+
+        return Response({"quiz": quiz_data, "attempt": attempt_payload})
+
+
+class AttemptedQuizzesView(APIView):
+    """List quizzes the current student has already attempted."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, format=None):
+        if not hasattr(request.user, "studentprofile"):
+            raise PermissionDenied("Only students can view attempted quizzes.")
+
+        student = request.user.studentprofile
+        enrolled_course_ids = student.enrolled_courses.values_list("id", flat=True)
+        attempted_quiz_ids = QuizAttempt.objects.filter(student=student).values_list(
+            "quiz_id", flat=True
+        )
+
+        quizzes = (
+            Quiz.objects.filter(
+                course_id__in=enrolled_course_ids, id__in=attempted_quiz_ids
+            )
+            .select_related("course")
+            .order_by("-created_at")
+        )
         serializer = QuizSerializer(quizzes, many=True, context={"request": request})
         return Response(serializer.data)

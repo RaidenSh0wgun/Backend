@@ -27,6 +27,9 @@ from quiz.views import (
     QuizAttemptsView,
     QuizAttemptDetail,
     PendingQuizzesView,
+    QuizViewDetail,
+    AttemptedQuizzesView,
+    QuizTimerView,
 )
 from user.views import RegisterView, CurrentUserView, RoleTokenObtainPairView
 from event.views import MyCalendarView
@@ -54,12 +57,27 @@ urlpatterns = [
     # Quiz app urls
     path("api/quizzes/", ListCreateQuiz.as_view(), name="quiz_list"),
     path("api/quizzes/pending/", PendingQuizzesView.as_view(), name="pending_quizzes"),
+    path(
+        "api/quizzes/attempted/",
+        AttemptedQuizzesView.as_view(),
+        name="attempted_quizzes",
+    ),
     path("api/quizzes/<int:pk>/", RetrieveUpdateDestroyQuiz.as_view(), name="retrieve_update_destroy_quiz",),
     path("api/quizzes/<int:quiz_id>/attempts/", QuizAttemptsView.as_view(), name="quiz_attempts",),
     path("api/quizzes/<int:quiz_id>/attempts/<int:attempt_id>/", QuizAttemptDetail.as_view(), name="quiz_attempt_detail",),
     path("api/quizzes/<int:quiz_id>/questions/", QuizQuestions.as_view(), name="questions",),
     path("api/questions/<int:pk>/", QuizQuestionDetail.as_view(), name="quiz_question_detail",),
     path("api/quizzes/<int:quiz_id>/submit/", SubmitQuiz.as_view(), name="quiz_submit",),
+    path(
+        "api/quizzes/<int:quiz_id>/view/",
+        QuizViewDetail.as_view(),
+        name="quiz_view_detail",
+    ),
+    path(
+        "api/quizzes/<int:quiz_id>/timer/",
+        QuizTimerView.as_view(),
+        name="quiz_timer",
+    ),
 
     # Course
     path("api/courses/", CourseListCreate.as_view(), name="course_list_create"),
