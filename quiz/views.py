@@ -6,6 +6,7 @@ from rest_framework.exceptions import PermissionDenied
 from django.core.cache import cache
 from django.utils import timezone
 from datetime import datetime
+from collections import Counter
 
 from .models import Quiz, Question, Answer, QuizAttempt
 from .serializers import (
@@ -144,7 +145,20 @@ class SubmitQuiz(APIView):
             )
 
         questions = quiz.questions.prefetch_related("answers").all()
-        total_questions = questions.count() or 1
+
+        total_points = 0
+        for question in questions:
+            if question.question_type == "enumeration":
+                correct_values = [
+                    value.strip()
+                    for value in (question.correct_text or "").split("\n")
+                    if value.strip()
+                ]
+                total_points += len(correct_values) if correct_values else 1
+            else:
+                total_points += 1
+
+        total_points = total_points or 1
 
         score = 0
         for question in questions:
@@ -165,9 +179,13 @@ class SubmitQuiz(APIView):
                     for value in str(submitted_value).split("\n")
                     if value.strip()
                 ]
-                if correct_values and len(correct_values) == len(submitted_values):
-                    if sorted(correct_values) == sorted(submitted_values):
-                        score += 1
+                if correct_values:
+                    correct_counter = Counter(correct_values)
+                    submitted_counter = Counter(submitted_values)
+                    score += sum(
+                        min(count, submitted_counter.get(value, 0))
+                        for value, count in correct_counter.items()
+                    )
                 continue
 
             if question.question_type == "identification":
@@ -204,7 +222,7 @@ class SubmitQuiz(APIView):
             student=student,
             quiz=quiz,
             score=score,
-            total=total_questions,
+            total=total_points,
             answers=answers_map,
         )
 
