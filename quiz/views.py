@@ -154,6 +154,22 @@ class SubmitQuiz(APIView):
             if submitted_value is None or submitted_value == "":
                 continue
 
+            if question.question_type == "enumeration":
+                correct_values = [
+                    value.strip().casefold()
+                    for value in (question.correct_text or "").split("\n")
+                    if value.strip()
+                ]
+                submitted_values = [
+                    value.strip().casefold()
+                    for value in str(submitted_value).split("\n")
+                    if value.strip()
+                ]
+                if correct_values and len(correct_values) == len(submitted_values):
+                    if sorted(correct_values) == sorted(submitted_values):
+                        score += 1
+                continue
+
             if question.question_type == "identification":
                 correct = (question.correct_text or "").strip()
                 submitted_text = str(submitted_value).strip()

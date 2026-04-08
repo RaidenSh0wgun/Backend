@@ -13,8 +13,10 @@ class CourseListCreate(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # All authenticated users can view all courses in the "All Courses" tab.
-        return Course.objects.all()
+        user = self.request.user
+        if hasattr(user, "instructorprofile"):
+            return Course.objects.filter(author__user=user)
+        return Course.objects.filter(is_active=True)
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -30,7 +32,10 @@ class CourseRetrieveUpdateDestroy(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Course.objects.all()
+        user = self.request.user
+        if hasattr(user, "instructorprofile"):
+            return Course.objects.filter(author__user=user)
+        return Course.objects.filter(is_active=True)
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -57,9 +62,9 @@ class CourseList(generics.ListAPIView):
             return Course.objects.filter(author__user=user)
 
         if hasattr(user, "studentprofile"):
-            return user.studentprofile.enrolled_courses.all().order_by("title")
+            return user.studentprofile.enrolled_courses.filter(is_active=True).order_by("title")
 
-        return Course.objects.all()
+        return Course.objects.filter(is_active=True)
 
 
 class EnrolledCoursesList(APIView):
@@ -70,7 +75,7 @@ class EnrolledCoursesList(APIView):
         if not hasattr(request.user, "studentprofile"):
             return Response([])
         student = request.user.studentprofile
-        courses = student.enrolled_courses.all().order_by("title")
+        courses = student.enrolled_courses.filter(is_active=True).order_by("title")
         serializer = CourseSerializer(courses, many=True, context={"request": request})
         return Response(serializer.data)
 
@@ -81,8 +86,10 @@ class CourseDetail(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Allow any authenticated user to view any course (for all-courses view and details)
-        return Course.objects.all()
+        user = self.request.user
+        if hasattr(user, "instructorprofile"):
+            return Course.objects.filter(author__user=user)
+        return Course.objects.filter(is_active=True)
 
 
 class EnrollCourseView(APIView):
@@ -92,7 +99,7 @@ class EnrollCourseView(APIView):
         if not hasattr(request.user, "studentprofile"):
             raise PermissionDenied("Only students can enroll in courses.")
 
-        course = get_object_or_404(Course, pk=pk)
+        course = get_object_or_404(Course, pk=pk, is_active=True)
         student = request.user.studentprofile
         student.enrolled_courses.add(course)
 

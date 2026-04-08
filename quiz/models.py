@@ -32,11 +32,13 @@ class Quiz(models.Model):
 
 class Question(models.Model):
     TYPE_IDENTIFICATION = "identification"
+    TYPE_ENUMERATION = "enumeration"
     TYPE_MULTIPLE_CHOICE = "mcq"
     TYPE_TRUE_FALSE = "tf"
 
     TYPE_CHOICES = [
         (TYPE_IDENTIFICATION, "Identification"),
+        (TYPE_ENUMERATION, "Enumeration"),
         (TYPE_MULTIPLE_CHOICE, "Multiple choice"),
         (TYPE_TRUE_FALSE, "True or false"),
     ]

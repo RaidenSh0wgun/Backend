@@ -23,6 +23,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "description",
+            "is_active",
             "author",
             "author_name",
             "created_at",

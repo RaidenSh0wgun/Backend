@@ -4,6 +4,7 @@ from django.db import models
 class Course(models.Model):
     title = models.CharField(max_length=100)
     description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
     author = models.ForeignKey(
         'user.InstructorProfile',
         on_delete=models.CASCADE, 
