@@ -26,6 +26,8 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         fields = ("id", "username", "email", "role")
 
     def get_role(self, obj):
+        if obj.is_superuser:
+            return "admin"
         if hasattr(obj, "instructorprofile"):
             return "teacher"
         if hasattr(obj, "studentprofile"):
@@ -42,6 +44,19 @@ class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         role = (self.initial_data.get("role") or "").strip().lower()
         user = self.user
+
+        if (
+            not user.is_superuser
+            and not hasattr(user, "instructorprofile")
+            and not hasattr(user, "studentprofile")
+        ):
+            student_group, _ = Group.objects.get_or_create(name="Students")
+            user.groups.add(student_group)
+            StudentProfile.objects.create(
+                user=user,
+                student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
+                full_name=user.username,
+            )
 
         if role == "teacher":
             if not (
@@ -93,3 +108,26 @@ class CustomRegisterSerializer(RegisterSerializer):
             )
 
         return user
+
+
+class AdminUserSerializer(serializers.ModelSerializer):
+    role = serializers.SerializerMethodField()
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ("id", "username", "email", "is_active", "role", "full_name")
+
+    def get_role(self, obj):
+        if obj.is_superuser:
+            return "admin"
+        if hasattr(obj, "instructorprofile"):
+            return "teacher"
+        return "student"
+
+    def get_full_name(self, obj):
+        if hasattr(obj, "instructorprofile"):
+            return obj.instructorprofile.full_name
+        if hasattr(obj, "studentprofile"):
+            return obj.studentprofile.full_name
+        return ""

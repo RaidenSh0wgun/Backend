@@ -31,7 +31,13 @@ from quiz.views import (
     AttemptedQuizzesView,
     QuizTimerView,
 )
-from user.views import RegisterView, CurrentUserView, RoleTokenObtainPairView
+from user.views import (
+    RegisterView,
+    CurrentUserView,
+    RoleTokenObtainPairView,
+    AdminUserListView,
+    AdminUserDetailView,
+)
 from event.views import MyCalendarView
 from course.views import (
     CourseListCreate,
@@ -53,6 +59,8 @@ urlpatterns = [
     # User / auth-related custom endpoints
     path("api/register/", RegisterView.as_view(), name="register"),
     path("api/users/me/", CurrentUserView.as_view(), name="current_user"),
+    path("api/admin/users/", AdminUserListView.as_view(), name="admin_users"),
+    path("api/admin/users/<int:user_id>/", AdminUserDetailView.as_view(), name="admin_user_detail"),
 
     # Quiz app urls
     path("api/quizzes/", ListCreateQuiz.as_view(), name="quiz_list"),

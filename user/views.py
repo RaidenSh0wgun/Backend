@@ -5,16 +5,68 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.models import Group, User
+from django.db.models import Q
 from .models import *
 from .serializers import (
     StudentProfileSerializer,
     InstructorProfileSerializer,
     CurrentUserSerializer,
     RoleTokenObtainPairSerializer,
+    AdminUserSerializer,
 )
 import uuid
 
 # Create your views here.
+def ensure_user_default_student(user):
+    if user.is_superuser:
+        return
+    if hasattr(user, "instructorprofile"):
+        return
+    if hasattr(user, "studentprofile"):
+        return
+    student_group, _ = Group.objects.get_or_create(name="Students")
+    user.groups.add(student_group)
+    StudentProfile.objects.create(
+        user=user,
+        student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
+        full_name=user.username,
+    )
+
+
+def promote_to_teacher(user):
+    teacher_group, _ = Group.objects.get_or_create(name="Teachers")
+    student_group, _ = Group.objects.get_or_create(name="Students")
+    user.groups.remove(student_group)
+    user.groups.add(teacher_group)
+    user.is_staff = True
+    user.save()
+    if hasattr(user, "studentprofile"):
+        user.studentprofile.delete()
+    if not hasattr(user, "instructorprofile"):
+        InstructorProfile.objects.create(
+            user=user,
+            instructor_id=f"INSTR_{uuid.uuid4().hex[:8].upper()}",
+            full_name=user.username,
+        )
+
+
+def demote_to_student(user):
+    teacher_group, _ = Group.objects.get_or_create(name="Teachers")
+    student_group, _ = Group.objects.get_or_create(name="Students")
+    user.groups.remove(teacher_group)
+    user.groups.add(student_group)
+    user.is_staff = False
+    user.save()
+    if hasattr(user, "instructorprofile"):
+        user.instructorprofile.delete()
+    if not hasattr(user, "studentprofile"):
+        StudentProfile.objects.create(
+            user=user,
+            student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
+            full_name=user.username,
+        )
+
+
 class StudentProfileView(generics.RetrieveUpdateAPIView):
     queryset = StudentProfile.objects.all()
     serializer_class = StudentProfileSerializer
@@ -38,7 +90,6 @@ class RegisterView(APIView):
         username = request.data.get("username")
         email = request.data.get("email")
         password = request.data.get("password1") or request.data.get("password")
-        role = str(request.data.get("role") or "student").strip().lower()
 
         if not username or not password:
             return Response(
@@ -58,25 +109,7 @@ class RegisterView(APIView):
             password=password,
         )
 
-        if role == "teacher":
-            teacher_group, _ = Group.objects.get_or_create(name="Teachers")
-            user.groups.add(teacher_group)
-            user.is_staff = True
-            user.save()
-            InstructorProfile.objects.create(
-                user=user,
-                instructor_id=f"INSTR_{uuid.uuid4().hex[:8].upper()}",
-                full_name=username,
-            )
-        else:
-            student_group, _ = Group.objects.get_or_create(name="Students")
-            user.groups.add(student_group)
-            user.save()
-            StudentProfile.objects.create(
-                user=user,
-                student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
-                full_name=username,
-            )
+        ensure_user_default_student(user)
 
         refresh = RefreshToken.for_user(user)
 
@@ -93,6 +126,7 @@ class CurrentUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        ensure_user_default_student(request.user)
         serializer = CurrentUserSerializer(request.user)
         return Response(serializer.data)
 
@@ -127,3 +161,136 @@ class ChangeUserGroupView(generics.ListAPIView):
         user.groups.add(target_group)
         user.save()
         return Response({"detail": f"{user.username} added to {group_name}"})
+
+
+class AdminUserListView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        search = (request.query_params.get("search") or "").strip()
+        role = (request.query_params.get("role") or "student").strip().lower()
+        users = User.objects.all().order_by("username")
+
+        if role == "student":
+            users = users.filter(
+                is_superuser=False,
+            ).exclude(instructorprofile__isnull=False)
+        elif role == "teacher":
+            users = users.filter(is_superuser=False, instructorprofile__isnull=False)
+        elif role == "all":
+            users = users.exclude(is_superuser=True)
+        else:
+            return Response(
+                {"detail": "Invalid role filter."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if search:
+            users = users.filter(
+                Q(username__icontains=search)
+                | Q(email__icontains=search)
+                | Q(studentprofile__full_name__icontains=search)
+                | Q(instructorprofile__full_name__icontains=search)
+            ).distinct()
+
+        serializer = AdminUserSerializer(users, many=True)
+        return Response(serializer.data)
+
+
+class AdminUserDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, user_id):
+        return User.objects.get(id=user_id)
+
+    def get(self, request, user_id):
+        try:
+            user = self.get_object(user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = AdminUserSerializer(user)
+        return Response(serializer.data)
+
+    def patch(self, request, user_id):
+        try:
+            user = self.get_object(user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.is_superuser:
+            return Response(
+                {"detail": "Superuser accounts cannot be modified here."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        username = request.data.get("username")
+        full_name = request.data.get("full_name")
+        password = request.data.get("password")
+        is_active = request.data.get("is_active")
+        role = request.data.get("role")
+
+        if username is not None:
+            username = str(username).strip()
+            if not username:
+                return Response(
+                    {"detail": "Username cannot be empty."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if User.objects.exclude(id=user.id).filter(username=username).exists():
+                return Response(
+                    {"detail": "A user with that username already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.username = username
+
+        if is_active is not None:
+            user.is_active = bool(is_active)
+
+        if password is not None:
+            password = str(password)
+            if len(password) < 8:
+                return Response(
+                    {"detail": "Password must be at least 8 characters."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.set_password(password)
+
+        if full_name is not None:
+            full_name = str(full_name).strip()
+            if hasattr(user, "instructorprofile"):
+                user.instructorprofile.full_name = full_name
+                user.instructorprofile.save(update_fields=["full_name"])
+            else:
+                ensure_user_default_student(user)
+                user.studentprofile.full_name = full_name
+                user.studentprofile.save(update_fields=["full_name"])
+
+        if role is not None:
+            role = str(role).strip().lower()
+            if role == "teacher":
+                promote_to_teacher(user)
+            elif role == "student":
+                demote_to_student(user)
+            else:
+                return Response(
+                    {"detail": "Invalid role."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        user.save()
+        ensure_user_default_student(user)
+        serializer = AdminUserSerializer(user)
+        return Response(serializer.data)
+
+    def delete(self, request, user_id):
+        try:
+            user = self.get_object(user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+        if user.is_superuser:
+            return Response(
+                {"detail": "Superuser accounts cannot be deleted."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
