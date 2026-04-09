@@ -1,6 +1,6 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .serializers import CourseSerializer, EnrolledStudentSerializer
@@ -100,6 +100,11 @@ class EnrollCourseView(APIView):
             raise PermissionDenied("Only students can enroll in courses.")
 
         course = get_object_or_404(Course, pk=pk, is_active=True)
+        passkey = request.data.get("passkey")
+        if course.passkey:
+            if passkey is None or str(passkey).strip() != course.passkey:
+                raise ValidationError({"passkey": "Invalid passkey for this course."})
+
         student = request.user.studentprofile
         student.enrolled_courses.add(course)
 

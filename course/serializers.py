@@ -16,6 +16,7 @@ class CourseSerializer(serializers.ModelSerializer):
         source="author.user.username", read_only=True
     )
     is_enrolled = serializers.SerializerMethodField()
+    passkey = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Course
@@ -26,6 +27,7 @@ class CourseSerializer(serializers.ModelSerializer):
             "is_active",
             "author",
             "author_name",
+            "passkey",
             "created_at",
             "updated_at",
             "is_enrolled",
