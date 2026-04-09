@@ -2,6 +2,60 @@ from rest_framework import serializers
 from .models import Quiz, Question, Answer, QuizAttempt
 
 
+def recalculate_attempt_scores(quiz_id):
+    """Recalculate scores for all attempts of a quiz."""
+    from collections import Counter
+    
+    attempts = QuizAttempt.objects.filter(quiz_id=quiz_id)
+    for attempt in attempts:
+        correct = 0
+        total = 0
+        questions = attempt.quiz.questions.all()
+
+        for question in questions:
+            total += 1
+            user_answer = attempt.answers.get(str(question.id))
+
+            if user_answer is None or user_answer == "":
+                continue
+
+            if question.question_type in ["identification", "enumeration"]:
+                correct_text = (question.correct_text or "").strip()
+                if question.question_type == "enumeration":
+                    correct_values = [
+                        value.strip().lower()
+                        for value in correct_text.split("\n")
+                        if value.strip()
+                    ]
+                    if correct_values:
+                        submitted_values = [
+                            value.strip().lower()
+                            for value in (user_answer or "").split("\n")
+                            if value.strip()
+                        ]
+                        correct_counter = Counter(correct_values)
+                        correct += sum(
+                            min(count, submitted_values.count(value))
+                            for value, count in correct_counter.items()
+                        )
+                else:
+                    if correct_text and str(user_answer).strip().lower() == correct_text.lower():
+                        correct += 1
+            else:
+                # MCQ or TF
+                try:
+                    answer_id = int(user_answer)
+                    selected = question.answers.filter(id=answer_id).first()
+                    if selected and selected.is_correct:
+                        correct += 1
+                except (ValueError, TypeError):
+                    pass
+
+        attempt.score = correct
+        attempt.total = total
+        attempt.save(update_fields=["score", "total"])
+
+
 class AnswerSerializer(serializers.ModelSerializer):
     text = serializers.CharField(source="answer_text")
 
@@ -12,9 +66,6 @@ class AnswerSerializer(serializers.ModelSerializer):
             "text",
             "is_correct",
         ]
-        extra_kwargs = {
-            "is_correct": {"write_only": True},
-        }
 
 
 class QuestionSerializer(serializers.ModelSerializer):
@@ -181,5 +232,8 @@ class QuizCreateUpdateSerializer(serializers.ModelSerializer):
             question = Question.objects.create(quiz=instance, **question_data)
             for choice_data in choices_data:
                 Answer.objects.create(Question=question, **choice_data)
+
+        # Recalculate scores for all attempts since questions changed
+        recalculate_attempt_scores(instance.id)
 
         return instance

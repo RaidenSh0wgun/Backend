@@ -18,6 +18,58 @@ from .serializers import (
 )
 
 
+def recalculate_attempt_scores(quiz_id):
+    """Recalculate scores for all attempts of a quiz."""
+    attempts = QuizAttempt.objects.filter(quiz_id=quiz_id)
+    for attempt in attempts:
+        correct = 0
+        total = 0
+        questions = attempt.quiz.questions.all()
+
+        for question in questions:
+            total += 1
+            user_answer = attempt.answers.get(str(question.id))
+
+            if user_answer is None or user_answer == "":
+                continue
+
+            if question.question_type in ["identification", "enumeration"]:
+                correct_text = (question.correct_text or "").strip()
+                if question.question_type == "enumeration":
+                    correct_values = [
+                        value.strip().lower()
+                        for value in correct_text.split("\n")
+                        if value.strip()
+                    ]
+                    if correct_values:
+                        submitted_values = [
+                            value.strip().lower()
+                            for value in (user_answer or "").split("\n")
+                            if value.strip()
+                        ]
+                        correct_counter = Counter(correct_values)
+                        correct += sum(
+                            min(count, submitted_values.count(value))
+                            for value, count in correct_counter.items()
+                        )
+                else:
+                    if correct_text and str(user_answer).strip().lower() == correct_text.lower():
+                        correct += 1
+            else:
+                # MCQ or TF
+                try:
+                    answer_id = int(user_answer)
+                    selected = question.answers.filter(id=answer_id).first()
+                    if selected and selected.is_correct:
+                        correct += 1
+                except (ValueError, TypeError):
+                    pass
+
+        attempt.score = correct
+        attempt.total = total
+        attempt.save(update_fields=["score", "total"])
+
+
 class ListCreateQuiz(generics.ListCreateAPIView):
     queryset = Quiz.objects.all()
     permission_classes = [permissions.IsAuthenticated]
@@ -96,12 +148,17 @@ class QuizQuestionDetail(APIView):
 
     def patch(self, request, pk, format=None):
         question = self.get_object(pk)
+        quiz_id = question.quiz_id
         serializer = QuestionSerializer(
             question, data=request.data, partial=True
         )
 
         if serializer.is_valid():
             serializer.save()
+            
+            # Recalculate scores for all attempts of this quiz
+            recalculate_attempt_scores(quiz_id)
+            
             return Response(
                 {
                     "message": "Question updated successfully",
@@ -328,12 +385,21 @@ class QuizAttemptDetail(APIView):
         if not hasattr(request.user, "instructorprofile"):
             raise PermissionDenied("Only instructors can update quiz attempts.")
         attempt = self.get_object(quiz_id, attempt_id)
+        
         serializer = QuizAttemptSerializer(
             attempt, data=request.data, partial=True
         )
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
+            updated_attempt = serializer.save()
+            
+            # Recalculate score if answers were changed
+            if "answers" in request.data:
+                recalculate_attempt_scores(quiz_id)
+                # Refresh attempt from DB
+                attempt = QuizAttempt.objects.get(id=attempt_id)
+            
+            # Return updated attempt with recalculated score
+            return Response(QuizAttemptSerializer(attempt).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
