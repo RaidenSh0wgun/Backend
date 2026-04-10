@@ -5,7 +5,8 @@ Run with: python manage.py shell < seed_data.py
 import os
 import sys
 import random
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
+from django.utils import timezone
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
@@ -190,6 +191,8 @@ for course in courses:
         due_date = start_date + timedelta(days=random_days)
         
         quiz_title = f"{course.title} - Quiz {j} (#{quiz_counter})"
+        # Create timezone-aware datetime at midnight UTC
+        due_date_dt = timezone.make_aware(datetime.combine(due_date, datetime.min.time()))
         quiz = Quiz.objects.create(
             author=course.author,
             course=course,
@@ -197,7 +200,7 @@ for course in courses:
             description=f"Quiz for {course.title}, number {j}.",
             duration_minutes=random.randint(10, 60),
             is_active=True,
-            due_date=due_date,
+            due_date=due_date_dt,
         )
 
         num_questions = random.randint(MIN_QUESTIONS_PER_QUIZ, MAX_QUESTIONS_PER_QUIZ)
