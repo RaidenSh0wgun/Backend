@@ -477,3 +477,38 @@ class AttemptedQuizzesView(APIView):
         )
         serializer = QuizSerializer(quizzes, many=True, context={"request": request})
         return Response(serializer.data)
+
+
+class CalendarQuizzesView(APIView):
+    """List quizzes with due dates for calendar display.
+
+    Students see quizzes from enrolled courses.
+    Teachers see quizzes they authored.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, format=None):
+        user = request.user
+
+        if hasattr(user, "studentprofile"):
+            student = user.studentprofile
+            course_ids = student.enrolled_courses.values_list("id", flat=True)
+            quizzes = Quiz.objects.filter(
+                course_id__in=course_ids,
+                due_date__isnull=False,
+            )
+        elif hasattr(user, "instructorprofile"):
+            instructor = user.instructorprofile
+            quizzes = Quiz.objects.filter(
+                author=instructor,
+                due_date__isnull=False,
+            )
+        else:
+            raise PermissionDenied(
+                "Only students and teachers can view calendar quizzes."
+            )
+
+        quizzes = quizzes.select_related("course").order_by("due_date")
+        serializer = QuizSerializer(quizzes, many=True, context={"request": request})
+        return Response(serializer.data)

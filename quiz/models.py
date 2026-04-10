@@ -25,6 +25,7 @@ class Quiz(models.Model):
     duration_minutes = models.PositiveIntegerField(default=10)
     is_active = models.BooleanField(default=True, help_text="Whether students can take this quiz")
     due_date = models.DateTimeField(null=True, blank=True, help_text="Quiz deadline for calendar")
+    show_scores_after_quiz = models.BooleanField(default=True, help_text="Whether students can view their scores after completing the quiz")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -29,6 +29,7 @@ from quiz.views import (
     PendingQuizzesView,
     QuizViewDetail,
     AttemptedQuizzesView,
+    CalendarQuizzesView,
     QuizTimerView,
 )
 from user.views import (
@@ -70,6 +71,7 @@ urlpatterns = [
         AttemptedQuizzesView.as_view(),
         name="attempted_quizzes",
     ),
+    path("api/quizzes/calendar/", CalendarQuizzesView.as_view(), name="calendar_quizzes"),
     path("api/quizzes/<int:pk>/", RetrieveUpdateDestroyQuiz.as_view(), name="retrieve_update_destroy_quiz",),
     path("api/quizzes/<int:quiz_id>/attempts/", QuizAttemptsView.as_view(), name="quiz_attempts",),
     path("api/quizzes/<int:quiz_id>/attempts/<int:attempt_id>/", QuizAttemptDetail.as_view(), name="quiz_attempt_detail",),

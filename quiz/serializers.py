@@ -149,6 +149,7 @@ class QuizSerializer(serializers.ModelSerializer):
             "is_active",
             "course",
             "due_date",
+            "show_scores_after_quiz",
             "created_at",
             "question_count",
             "has_attempted",
@@ -193,6 +194,7 @@ class QuizCreateUpdateSerializer(serializers.ModelSerializer):
             "is_active",
             "course",
             "due_date",
+            "show_scores_after_quiz",
             "questions",
         ]
         read_only_fields = ["id"]
