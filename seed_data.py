@@ -5,6 +5,7 @@ Run with: python manage.py shell < seed_data.py
 import os
 import sys
 import random
+from datetime import date, timedelta
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
@@ -174,10 +175,20 @@ print("✅ Enrollment complete.")
 # ── Step 5: Create quizzes, questions, and answers ─────────────────────────
 print("📝 Creating quizzes, questions, and answers...")
 quiz_counter = 0
+
+# Date range for due dates: today (April 10, 2026) to July 31, 2026
+start_date = date(2026, 4, 10)
+end_date = date(2026, 7, 31)
+date_range_days = (end_date - start_date).days
+
 for course in courses:
     num_quizzes = random.randint(MIN_QUIZZES_PER_COURSE, MAX_QUIZZES_PER_COURSE)
     for j in range(1, num_quizzes + 1):
         quiz_counter += 1
+        # Generate random due date within the range
+        random_days = random.randint(0, date_range_days)
+        due_date = start_date + timedelta(days=random_days)
+        
         quiz_title = f"{course.title} - Quiz {j} (#{quiz_counter})"
         quiz = Quiz.objects.create(
             author=course.author,
@@ -186,6 +197,7 @@ for course in courses:
             description=f"Quiz for {course.title}, number {j}.",
             duration_minutes=random.randint(10, 60),
             is_active=True,
+            due_date=due_date,
         )
 
         num_questions = random.randint(MIN_QUESTIONS_PER_QUIZ, MAX_QUESTIONS_PER_QUIZ)
