@@ -2,6 +2,22 @@ from rest_framework import serializers
 from .models import Quiz, Question, Answer, QuizAttempt
 
 
+def normalize_answer(text, format_type):
+    if not text:
+        return ""
+    text = str(text).strip()
+    if format_type == 'ignore':
+        return text.lower()
+    elif format_type == 'upper':
+        return text.upper()
+    elif format_type == 'lower':
+        return text.lower()
+    elif format_type == 'capitalize':
+        return text.capitalize()
+    else:  # exact
+        return text
+
+
 def recalculate_attempt_scores(quiz_id):
     """Recalculate scores for all attempts of a quiz."""
     from collections import Counter
@@ -21,16 +37,17 @@ def recalculate_attempt_scores(quiz_id):
 
             if question.question_type in ["identification", "enumeration"]:
                 correct_text = (question.correct_text or "").strip()
+                user_answer_str = str(user_answer or "").strip()
                 if question.question_type == "enumeration":
                     correct_values = [
-                        value.strip().lower()
+                        normalize_answer(value.strip(), question.answer_format)
                         for value in correct_text.split("\n")
                         if value.strip()
                     ]
                     if correct_values:
                         submitted_values = [
-                            value.strip().lower()
-                            for value in (user_answer or "").split("\n")
+                            normalize_answer(value.strip(), question.answer_format)
+                            for value in user_answer_str.split("\n")
                             if value.strip()
                         ]
                         correct_counter = Counter(correct_values)
@@ -39,7 +56,9 @@ def recalculate_attempt_scores(quiz_id):
                             for value, count in correct_counter.items()
                         )
                 else:
-                    if correct_text and str(user_answer).strip().lower() == correct_text.lower():
+                    correct_normalized = normalize_answer(correct_text, question.answer_format)
+                    user_normalized = normalize_answer(user_answer_str, question.answer_format)
+                    if correct_normalized and user_normalized == correct_normalized:
                         correct += 1
             else:
                 # MCQ or TF
@@ -78,6 +97,7 @@ class QuestionSerializer(serializers.ModelSerializer):
             "text",
             "question_type",
             "correct_text",
+            "answer_format",
             "choices",
         ]
 
@@ -99,6 +119,9 @@ class QuestionSerializer(serializers.ModelSerializer):
         )
         instance.correct_text = validated_data.get(
             "correct_text", instance.correct_text
+        )
+        instance.answer_format = validated_data.get(
+            "answer_format", instance.answer_format
         )
 
         choices_data = validated_data.pop("answers", validated_data.pop("choices", []))

@@ -50,6 +50,18 @@ class Question(models.Model):
         max_length=20, choices=TYPE_CHOICES, default=TYPE_MULTIPLE_CHOICE
     )
     correct_text = models.CharField(max_length=255, blank=True)
+    answer_format = models.CharField(
+        max_length=20,
+        choices=[
+            ('exact', 'Exact case'),
+            ('ignore', 'Ignore case'),
+            ('upper', 'All uppercase'),
+            ('lower', 'All lowercase'),
+            ('capitalize', 'Capitalize'),
+        ],
+        default='exact',
+        help_text="How to handle case sensitivity for text answers"
+    )
         
 class Answer(models.Model):
     Question = models.ForeignKey(Question, related_name="answers", on_delete=models.CASCADE)
