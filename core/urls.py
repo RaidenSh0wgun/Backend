@@ -38,6 +38,8 @@ from user.views import (
     RoleTokenObtainPairView,
     AdminUserListView,
     AdminUserDetailView,
+    PasswordResetRequestView,
+    PasswordResetConfirmView,
 )
 from event.views import MyCalendarView
 from course.views import (
@@ -104,4 +106,8 @@ urlpatterns = [
     # dj-rest-auth
     path("dj-rest-auth/registration/", include("dj_rest_auth.registration.urls")),
     path("dj-rest-auth/", include("dj_rest_auth.urls")),
+
+    # Password Reset
+    path("api/auth/password/reset/", PasswordResetRequestView.as_view(), name="password_reset"),
+    path("api/auth/password/reset/confirm/", PasswordResetConfirmView.as_view(), name="password_reset_confirm"),
 ]
