@@ -1,6 +1,6 @@
-# Backend API - HorizonDev
+# Backend API - WHALMMS
 
-Django REST API backend for HorizonDev learning management system.
+Django REST API backend for WHALMMS learning management system.
 
 ## Setup
 
