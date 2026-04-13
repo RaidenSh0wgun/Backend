@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from rest_framework import generics, permissions, status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -16,12 +17,12 @@ from .serializers import (
     StudentProfileSerializer,
     InstructorProfileSerializer,
     CurrentUserSerializer,
+    ProfileUpdateSerializer,
     RoleTokenObtainPairSerializer,
     AdminUserSerializer,
 )
 import uuid
 
-# Create your views here.
 def ensure_user_default_student(user):
     if user.is_superuser:
         return
@@ -35,6 +36,42 @@ def ensure_user_default_student(user):
         user=user,
         student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
         full_name=user.username,
+    )
+
+
+def get_user_profile(user):
+    if hasattr(user, "instructorprofile"):
+        return user.instructorprofile
+    if hasattr(user, "studentprofile"):
+        return user.studentprofile
+    return None
+
+
+def send_verification_email(user, frontend_url):
+    profile = get_user_profile(user)
+    if not profile or not user.email:
+        return
+
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    verify_link = f"{frontend_url}/verify-email/{uid}/{token}/"
+
+    subject = "Verify your QuizApp email"
+    message = f"""
+    Hello {user.username},
+
+    Please verify your email address by clicking the link below:
+    {verify_link}
+
+    If you did not request this, please ignore this email.
+    """
+
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
     )
 
 
@@ -78,7 +115,9 @@ class StudentProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = super().get_queryset().filter(is_active=True).order_by('username')
+        queryset = super().get_queryset().order_by('student_id')
+        return queryset
+
 
 class InstructorProfileView(generics.RetrieveUpdateAPIView):
     queryset = InstructorProfile.objects.all()
@@ -86,7 +125,9 @@ class InstructorProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = super().get_queryset().filter(is_active=True).order_by("username")
+        queryset = super().get_queryset().order_by('instructor_id')
+        return queryset
+
 
 class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -95,6 +136,8 @@ class RegisterView(APIView):
         username = request.data.get("username")
         email = request.data.get("email")
         password = request.data.get("password1") or request.data.get("password")
+        role = (request.data.get("role") or "student").strip().lower()
+        full_name = request.data.get("full_name") or username
 
         if not username or not password:
             return Response(
@@ -114,7 +157,29 @@ class RegisterView(APIView):
             password=password,
         )
 
-        ensure_user_default_student(user)
+        if role == "teacher":
+            teacher_group, _ = Group.objects.get_or_create(name="Teachers")
+            user.groups.add(teacher_group)
+            user.is_staff = True
+            user.save()
+            InstructorProfile.objects.create(
+                user=user,
+                instructor_id=f"INSTR_{uuid.uuid4().hex[:8].upper()}",
+                full_name=full_name,
+            )
+        else:
+            student_group, _ = Group.objects.get_or_create(name="Students")
+            user.groups.add(student_group)
+            user.save()
+            StudentProfile.objects.create(
+                user=user,
+                student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
+                full_name=full_name,
+            )
+
+        frontend_url = request.data.get("frontend_url") or "http://localhost:5173"
+        if email:
+            send_verification_email(user, frontend_url)
 
         refresh = RefreshToken.for_user(user)
 
@@ -129,11 +194,123 @@ class RegisterView(APIView):
 
 class CurrentUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get(self, request):
         ensure_user_default_student(request.user)
-        serializer = CurrentUserSerializer(request.user)
+        serializer = CurrentUserSerializer(request.user, context={"request": request})
         return Response(serializer.data)
+
+    def patch(self, request):
+        user = request.user
+        profile = get_user_profile(user)
+
+        serializer = ProfileUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        username = serializer.validated_data.get("username")
+        email = serializer.validated_data.get("email")
+        full_name = serializer.validated_data.get("full_name")
+        bio = serializer.validated_data.get("bio")
+        sex = serializer.validated_data.get("sex")
+        avatar_url = serializer.validated_data.get("avatar_url")
+
+        if username is not None:
+            username = str(username).strip()
+            if not username:
+                return Response({"detail": "Username cannot be blank."}, status=status.HTTP_400_BAD_REQUEST)
+            if User.objects.exclude(id=user.id).filter(username=username).exists():
+                return Response({"detail": "A user with that username already exists."}, status=status.HTTP_400_BAD_REQUEST)
+            user.username = username
+
+        email_changed = False
+        if email is not None:
+            email = str(email).strip()
+            if email and User.objects.exclude(id=user.id).filter(email=email).exists():
+                return Response({"detail": "A user with that email already exists."}, status=status.HTTP_400_BAD_REQUEST)
+            if email != user.email:
+                email_changed = True
+            user.email = email
+
+        if full_name is not None:
+            full_name = str(full_name).strip()
+            if profile is not None:
+                profile.full_name = full_name
+            else:
+                user.first_name = full_name
+                user.last_name = ""
+
+        if bio is not None and profile is not None:
+            profile.bio = str(bio).strip()
+
+        if sex is not None and profile is not None:
+            profile.sex = str(sex).strip()
+
+        if avatar_url is not None and profile is not None:
+            profile.avatar_url = avatar_url
+
+        user.save()
+        if profile is not None:
+            if email_changed:
+                profile.email_verified = False
+                frontend_url = request.data.get("frontend_url") or "http://localhost:5173"
+                if user.email:
+                    send_verification_email(user, frontend_url)
+            profile.save()
+
+        serializer = CurrentUserSerializer(user, context={"request": request})
+        return Response(serializer.data)
+
+
+class EmailVerificationRequestView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+        if not email:
+            return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"message": "If an account with that email exists, a verification email has been sent."},
+                status=status.HTTP_200_OK,
+            )
+
+        frontend_url = request.data.get("frontend_url") or "http://localhost:5173"
+        send_verification_email(user, frontend_url)
+        return Response(
+            {"message": "A verification email has been sent if the account exists."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class EmailVerificationConfirmView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        uid = request.data.get("uid")
+        token = request.data.get("token")
+        if not uid or not token:
+            return Response({"error": "UID and token are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({"error": "Invalid verification link."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not default_token_generator.check_token(user, token):
+            return Response({"error": "Invalid or expired verification token."}, status=status.HTTP_400_BAD_REQUEST)
+
+        profile = get_user_profile(user)
+        if profile is not None:
+            profile.email_verified = True
+            profile.save()
+
+        return Response({"message": "Email has been verified."}, status=status.HTTP_200_OK)
 
 
 class RoleTokenObtainPairView(TokenObtainPairView):
@@ -229,6 +406,7 @@ class AdminUserDetailView(APIView):
             )
 
         username = request.data.get("username")
+        email = request.data.get("email")
         full_name = request.data.get("full_name")
         password = request.data.get("password")
         is_active = request.data.get("is_active")
@@ -247,6 +425,15 @@ class AdminUserDetailView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             user.username = username
+
+        if email is not None:
+            email = str(email).strip()
+            if email and User.objects.exclude(id=user.id).filter(email=email).exists():
+                return Response(
+                    {"detail": "A user with that email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.email = email
 
         if is_active is not None:
             user.is_active = bool(is_active)
@@ -301,13 +488,7 @@ class AdminUserDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# Password Reset Views
 class PasswordResetRequestView(APIView):
-    """
-    POST /api/auth/password/reset/
-    Request a password reset email with a confirmation link.
-    Body: { "email": "user@example.com" }
-    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
@@ -327,10 +508,12 @@ class PasswordResetRequestView(APIView):
                 status=status.HTTP_200_OK
             )
 
+        profile = get_user_profile(user)
+        frontend_url = request.data.get('frontend_url', 'http://localhost:5173')
+
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
 
-        frontend_url = request.data.get('frontend_url', 'http://localhost:5173')
         reset_link = f"{frontend_url}/reset-password/{uid}/{token}/"
 
         subject = "Password Reset Request - QuizApp"
@@ -365,11 +548,6 @@ class PasswordResetRequestView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
-    """
-    POST /api/auth/password/reset/confirm/
-    Confirm password reset with new password.
-    Body: { "uid": "encoded_uid", "token": "reset_token", "new_password": "newpassword123" }
-    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):

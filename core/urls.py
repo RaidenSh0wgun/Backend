@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from quiz.views import (
@@ -40,6 +42,8 @@ from user.views import (
     AdminUserDetailView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
+    EmailVerificationRequestView,
+    EmailVerificationConfirmView,
 )
 from event.views import MyCalendarView
 from course.views import (
@@ -64,6 +68,8 @@ urlpatterns = [
     path("api/users/me/", CurrentUserView.as_view(), name="current_user"),
     path("api/admin/users/", AdminUserListView.as_view(), name="admin_users"),
     path("api/admin/users/<int:user_id>/", AdminUserDetailView.as_view(), name="admin_user_detail"),
+    path("api/auth/email/verify/", EmailVerificationRequestView.as_view(), name="email_verify"),
+    path("api/auth/email/verify/confirm/", EmailVerificationConfirmView.as_view(), name="email_verify_confirm"),
 
     # Quiz app urls
     path("api/quizzes/", ListCreateQuiz.as_view(), name="quiz_list"),
@@ -110,4 +116,4 @@ urlpatterns = [
     # Password Reset
     path("api/auth/password/reset/", PasswordResetRequestView.as_view(), name="password_reset"),
     path("api/auth/password/reset/confirm/", PasswordResetConfirmView.as_view(), name="password_reset_confirm"),
-]
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
