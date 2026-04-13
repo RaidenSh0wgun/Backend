@@ -340,11 +340,11 @@ class PasswordResetRequestView(APIView):
         reset_link = f"{frontend_url}/reset-password/{uid}/{token}/"
 
         # Send email
-        subject = "Password Reset Request - HorizonDev"
+        subject = "Password Reset Request - QuizApp"
         message = f"""
         Hello {user.username},
 
-        You requested a password reset for your HorizonDev account.
+        You requested a password reset for your QuizApp account.
         
         Click the link below to reset your password:
         {reset_link}
@@ -354,7 +354,7 @@ class PasswordResetRequestView(APIView):
         If you didn't request this, please ignore this email.
         
         Thanks,
-        HorizonDev Team
+        WHALMMS Team
         """
         
         send_mail(
