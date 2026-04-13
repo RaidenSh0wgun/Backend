@@ -301,10 +301,7 @@ class AdminUserDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# ==========================================
 # Password Reset Views
-# ==========================================
-
 class PasswordResetRequestView(APIView):
     """
     POST /api/auth/password/reset/
@@ -325,21 +322,17 @@ class PasswordResetRequestView(APIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            # Don't reveal if email exists or not (security best practice)
             return Response(
                 {"message": "If an account with that email exists, a password reset link has been sent."},
                 status=status.HTTP_200_OK
             )
 
-        # Generate token and UID
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
 
-        # Build reset link (frontend will handle this URL)
         frontend_url = request.data.get('frontend_url', 'http://localhost:5173')
         reset_link = f"{frontend_url}/reset-password/{uid}/{token}/"
 
-        # Send email
         subject = "Password Reset Request - QuizApp"
         message = f"""
         Hello {user.username},
@@ -399,14 +392,12 @@ class PasswordResetConfirmView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Validate token
         if not default_token_generator.check_token(user, token):
             return Response(
                 {"error": "Invalid or expired reset token"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Set new password
         user.set_password(new_password)
         user.save()
 
