@@ -8,15 +8,15 @@ from .models import Course
 
 
 class CourseListCreate(generics.ListCreateAPIView):
-    queryset = Course.objects.all()
+    queryset = Course.objects.all().order_by("title")
     serializer_class = CourseSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
         if hasattr(user, "instructorprofile"):
-            return Course.objects.filter(author__user=user)
-        return Course.objects.filter(is_active=True)
+            return Course.objects.filter(author__user=user).order_by("title")
+        return Course.objects.filter(is_active=True).order_by("title")
 
     def perform_create(self, serializer):
         user = self.request.user
