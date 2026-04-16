@@ -193,6 +193,7 @@ class CustomRegisterSerializer(RegisterSerializer):
 class AdminUserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
+    sex = serializers.SerializerMethodField()
     email_verified = serializers.SerializerMethodField()
 
     class Meta:
@@ -204,6 +205,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "is_active",
             "role",
             "full_name",
+            "sex",
             "email_verified",
         )
 
@@ -219,6 +221,13 @@ class AdminUserSerializer(serializers.ModelSerializer):
             return obj.instructorprofile.full_name
         if hasattr(obj, "studentprofile"):
             return obj.studentprofile.full_name
+        return ""
+
+    def get_sex(self, obj):
+        if hasattr(obj, "instructorprofile"):
+            return obj.instructorprofile.sex
+        if hasattr(obj, "studentprofile"):
+            return obj.studentprofile.sex
         return ""
 
     def get_email_verified(self, obj):
