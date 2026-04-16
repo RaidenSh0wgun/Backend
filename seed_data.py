@@ -15,7 +15,7 @@ django.setup()
 from django.contrib.auth.models import User
 from user.models import StudentProfile, InstructorProfile
 from course.models import Course, Enrollment
-from quiz.models import Quiz, Question, Answer
+from quiz.models import Quiz, Question, Answer, QuizAttempt
 
 # ── Configuration ──────────────────────────────────────────────────────────
 NUM_COURSES = 30
@@ -55,7 +55,7 @@ def get_or_create_user(username, email, first_name, last_name, is_staff=False):
 print("🗑  Clearing existing data...")
 Answer.objects.all().delete()
 Question.objects.all().delete()
-QuizAttempt.objects.all().delete() if "QuizAttempt" in dir() else None
+QuizAttempt.objects.all().delete()
 Quiz.objects.all().delete()
 Enrollment.objects.all().delete()
 Course.objects.all().delete()
