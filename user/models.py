@@ -16,7 +16,6 @@ SEX_CHOICES = [
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='studentprofile')
     bio = models.TextField(blank=True)
-    student_id = models.CharField(max_length=20, unique=True)
     enrolled_courses = models.ManyToManyField(
         "course.Course", related_name="students", blank=False
     )
@@ -26,12 +25,11 @@ class StudentProfile(models.Model):
     email_verified = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.user.username} - {self.student_id}"
+        return f"{self.user.username} - {self.user.id}"
 
 
 class InstructorProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='instructorprofile')
-    instructor_id = models.CharField(max_length=20, unique=True)
     department = models.CharField(max_length=100, blank=True)
     assigned_courses = models.ManyToManyField(
         "course.Course", related_name="instructors", blank=False
@@ -43,7 +41,7 @@ class InstructorProfile(models.Model):
     email_verified = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.user.username} - {self.instructor_id}" 
+        return f"{self.user.username} - {self.user.id}" 
     
     
 @receiver(post_save, sender=User)

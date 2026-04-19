@@ -78,7 +78,6 @@ for i in range(1, NUM_TEACHERS + 1):
     profile, _ = InstructorProfile.objects.get_or_create(
         user=user,
         defaults={
-            "instructor_id": f"INST-{i:04d}",
             "department": random.choice(["Math", "Science", "English", "History", "CS", "Arts"]),
             "full_name": f"Teacher {i}",
         },
@@ -150,7 +149,6 @@ for i in range(1, NUM_STUDENTS + 1):
     profile, _ = StudentProfile.objects.get_or_create(
         user=user,
         defaults={
-            "student_id": f"STU-{i:04d}",
             "full_name": f"Student {i}",
         },
     )

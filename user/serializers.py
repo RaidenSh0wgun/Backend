@@ -3,7 +3,6 @@ from .models import *
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from dj_rest_auth.registration.serializers import RegisterSerializer
-import uuid
 
 
 class ProfileUpdateSerializer(serializers.Serializer):
@@ -22,8 +21,6 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     sex = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
     email_verified = serializers.SerializerMethodField()
-    student_id = serializers.SerializerMethodField()
-    instructor_id = serializers.SerializerMethodField()
     courses = serializers.SerializerMethodField()
     enrolled_courses = serializers.SerializerMethodField()
 
@@ -39,8 +36,6 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "sex",
             "avatar_url",
             "email_verified",
-            "student_id",
-            "instructor_id",
             "courses",
             "enrolled_courses",
         )
@@ -96,16 +91,6 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             return obj.studentprofile.email_verified
         return False
 
-    def get_student_id(self, obj):
-        if hasattr(obj, "studentprofile"):
-            return obj.studentprofile.student_id
-        return None
-
-    def get_instructor_id(self, obj):
-        if hasattr(obj, "instructorprofile"):
-            return obj.instructorprofile.instructor_id
-        return None
-
     def get_courses(self, obj):
         if hasattr(obj, "instructorprofile"):
             return [course.title for course in obj.instructorprofile.assigned_courses.all()]
@@ -134,7 +119,6 @@ class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
             user.groups.add(student_group)
             StudentProfile.objects.create(
                 user=user,
-                student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
                 full_name=user.username,
             )
 
@@ -174,7 +158,6 @@ class CustomRegisterSerializer(RegisterSerializer):
             user.save()
             InstructorProfile.objects.create(
                 user=user,
-                instructor_id=f"INSTR_{uuid.uuid4().hex[:8].upper()}",
                 full_name=full_name,
             )
         else:
@@ -183,7 +166,6 @@ class CustomRegisterSerializer(RegisterSerializer):
             user.save()
             StudentProfile.objects.create(
                 user=user,
-                student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
                 full_name=full_name,
             )
 

@@ -21,7 +21,6 @@ from .serializers import (
     RoleTokenObtainPairSerializer,
     AdminUserSerializer,
 )
-import uuid
 
 def ensure_user_default_student(user):
     if user.is_superuser:
@@ -34,7 +33,6 @@ def ensure_user_default_student(user):
     user.groups.add(student_group)
     StudentProfile.objects.create(
         user=user,
-        student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
         full_name=user.username,
     )
 
@@ -87,7 +85,6 @@ def promote_to_teacher(user):
     if not hasattr(user, "instructorprofile"):
         InstructorProfile.objects.create(
             user=user,
-            instructor_id=f"INSTR_{uuid.uuid4().hex[:8].upper()}",
             full_name=user.username,
         )
 
@@ -104,7 +101,6 @@ def demote_to_student(user):
     if not hasattr(user, "studentprofile"):
         StudentProfile.objects.create(
             user=user,
-            student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
             full_name=user.username,
         )
 
@@ -115,7 +111,7 @@ class StudentProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = super().get_queryset().order_by('student_id')
+        queryset = super().get_queryset().order_by('user_id')
         return queryset
 
 
@@ -125,7 +121,7 @@ class InstructorProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        queryset = super().get_queryset().order_by('instructor_id')
+        queryset = super().get_queryset().order_by('user_id')
         return queryset
 
 
@@ -164,7 +160,6 @@ class RegisterView(APIView):
             user.save()
             InstructorProfile.objects.create(
                 user=user,
-                instructor_id=f"INSTR_{uuid.uuid4().hex[:8].upper()}",
                 full_name=full_name,
             )
         else:
@@ -173,7 +168,6 @@ class RegisterView(APIView):
             user.save()
             StudentProfile.objects.create(
                 user=user,
-                student_id=f"STU_{uuid.uuid4().hex[:8].upper()}",
                 full_name=full_name,
             )
 
