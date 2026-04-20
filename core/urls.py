@@ -44,6 +44,7 @@ from user.views import (
     PasswordResetConfirmView,
     EmailVerificationRequestView,
     EmailVerificationConfirmView,
+    PublicUserProfileView,
 )
 from event.views import MyCalendarView
 from course.views import (
@@ -66,6 +67,7 @@ urlpatterns = [
     # User / auth-related custom endpoints
     path("api/register/", RegisterView.as_view(), name="register"),
     path("api/users/me/", CurrentUserView.as_view(), name="current_user"),
+    path("api/users/<str:username>/", PublicUserProfileView.as_view(), name="public_user_profile"),
     path("api/admin/users/", AdminUserListView.as_view(), name="admin_users"),
     path("api/admin/users/<int:user_id>/", AdminUserDetailView.as_view(), name="admin_user_detail"),
     path("api/auth/email/verify/", EmailVerificationRequestView.as_view(), name="email_verify"),

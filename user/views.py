@@ -577,3 +577,57 @@ class PasswordResetConfirmView(APIView):
             {"message": "Password has been reset successfully"},
             status=status.HTTP_200_OK
         )
+
+
+class PublicUserProfileView(APIView):
+    """
+    Public API endpoint to view any user's profile by username.
+    Accessible to all users (authenticated or not).
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, username):
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "User not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Build the response data
+        data = {
+            "id": user.id,
+            "username": user.username,
+            "full_name": "",
+            "email": user.email if user.is_active else "",
+            "role": "",
+            "bio": "",
+            "sex": "",
+            "avatar_url": "",
+        }
+
+        # Get role and profile-specific data
+        if user.is_superuser:
+            data["role"] = "admin"
+        elif hasattr(user, "instructorprofile"):
+            profile = user.instructorprofile
+            data["role"] = "teacher"
+            data["full_name"] = profile.full_name
+            data["bio"] = profile.bio or ""
+            data["sex"] = profile.sex or ""
+            if profile.avatar_url:
+                data["avatar_url"] = request.build_absolute_uri(profile.avatar_url.url)
+        elif hasattr(user, "studentprofile"):
+            profile = user.studentprofile
+            data["role"] = "student"
+            data["full_name"] = profile.full_name
+            data["bio"] = profile.bio or ""
+            data["sex"] = profile.sex or ""
+            if profile.avatar_url:
+                data["avatar_url"] = request.build_absolute_uri(profile.avatar_url.url)
+        else:
+            data["role"] = "student"
+            data["full_name"] = user.get_full_name() or user.username
+
+        return Response(data)
