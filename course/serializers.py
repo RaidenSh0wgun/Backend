@@ -48,3 +48,21 @@ class CourseSerializer(serializers.ModelSerializer):
 
         student = request.user.studentprofile
         return student.enrolled_courses.filter(id=obj.id).exists()
+
+    def validate_title(self, value):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not hasattr(user, "instructorprofile"):
+            return value
+        normalized = value.strip()
+        if not normalized:
+            raise serializers.ValidationError("Course title is required.")
+        queryset = Course.objects.filter(
+            author=user.instructorprofile,
+            title__iexact=normalized,
+        )
+        if self.instance is not None:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("You already have a course with this title.")
+        return normalized

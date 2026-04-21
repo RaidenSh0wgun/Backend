@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .serializers import CourseSerializer, EnrolledStudentSerializer
@@ -70,14 +71,17 @@ class CourseList(generics.ListAPIView):
 class EnrolledCoursesList(APIView):
     """List courses the current student is enrolled in."""
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = PageNumberPagination
 
     def get(self, request, format=None):
         if not hasattr(request.user, "studentprofile"):
             return Response([])
         student = request.user.studentprofile
         courses = student.enrolled_courses.filter(is_active=True).order_by("title")
-        serializer = CourseSerializer(courses, many=True, context={"request": request})
-        return Response(serializer.data)
+        paginator = self.pagination_class()
+        paginated_courses = paginator.paginate_queryset(courses, request, view=self)
+        serializer = CourseSerializer(paginated_courses, many=True, context={"request": request})
+        return paginator.get_paginated_response(serializer.data)
 
 
 class CourseDetail(generics.RetrieveAPIView):
