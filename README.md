@@ -1,8 +1,4 @@
-# Backend API - WHALMMS
-
 Django REST API backend for WHALMMS learning management system.
-
-## Setup
 
 1. Create virtual environment:
 ```bash
@@ -37,10 +33,6 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
-## Password Reset Feature
-
-### SMTP Configuration
-
 Add these variables to your `.env` file:
 
 ```env
@@ -58,9 +50,6 @@ DEFAULT_FROM_EMAIL='your-email@gmail.com'
 3. Generate an App Password: https://myaccount.google.com/apppasswords
 4. Use that app password in `EMAIL_HOST_PASSWORD`
 
-### API Endpoints
-
-#### 1. Request Password Reset
 ```http
 POST /api/auth/password/reset/
 Content-Type: application/json
@@ -80,7 +69,6 @@ Content-Type: application/json
 
 This sends an email to the user with a password reset link containing a unique, time-limited token.
 
-#### 2. Confirm Password Reset
 ```http
 POST /api/auth/password/reset/confirm/
 Content-Type: application/json
@@ -99,8 +87,6 @@ Content-Type: application/json
 }
 ```
 
-### How It Works
-
 1. User requests password reset via `/api/auth/password/reset/`
 2. Backend generates secure token (1-hour expiration)
 3. Email sent to user with reset link: `{frontend_url}/reset-password/{uid}/{token}/`
@@ -108,23 +94,16 @@ Content-Type: application/json
 5. User enters new password → frontend calls `/api/auth/password/reset/confirm/`
 6. Backend validates token and updates password
 
-### Security Features
-
 - Tokens expire after 1 hour
 - Tokens are single-use
 - Email enumeration protection (same response whether email exists or not)
 - Cryptographically secure token generation via Django's `default_token_generator`
-
-## Seed Data
 
 Optional: Populate database with sample data:
 ```bash
 python seed_data.py
 ```
 
-## API Endpoints
-
-### Authentication
 - `POST /api/register/` - Register new user
 - `POST /api/token/` - Login (JWT)
 - `POST /api/token/refresh/` - Refresh JWT token
@@ -132,13 +111,11 @@ python seed_data.py
 - `POST /api/auth/password/reset/` - Request password reset
 - `POST /api/auth/password/reset/confirm/` - Confirm password reset
 
-### Admin
 - `GET /api/admin/users/` - List users (admin only)
 - `GET /api/admin/users/<id>/` - Get user detail (admin only)
 - `PATCH /api/admin/users/<id>/` - Update user (admin only)
 - `DELETE /api/admin/users/<id>/` - Delete user (admin only)
 
-### Courses
 - `GET /api/courses/` - List all courses
 - `POST /api/courses/` - Create course
 - `GET /api/courses/<id>/` - Get course detail
@@ -146,7 +123,6 @@ python seed_data.py
 - `DELETE /api/courses/<id>/` - Delete course
 - `POST /api/courses/<id>/enroll/` - Enroll in course
 
-### Quizzes
 - `GET /api/quizzes/` - List all quizzes
 - `POST /api/quizzes/` - Create quiz
 - `GET /api/quizzes/<id>/` - Get quiz detail

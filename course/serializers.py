@@ -5,7 +5,6 @@ from user.models import StudentProfile
 
 class EnrolledStudentSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
-
     class Meta:
         model = StudentProfile
         fields = ["id", "user", "username", "full_name"]
@@ -17,7 +16,6 @@ class CourseSerializer(serializers.ModelSerializer):
     )
     is_enrolled = serializers.SerializerMethodField()
     passkey = serializers.CharField(write_only=True, required=False, allow_blank=True, allow_null=True)
-
     class Meta:
         model = Course
         fields = [
@@ -40,15 +38,12 @@ class CourseSerializer(serializers.ModelSerializer):
             "updated_at",
             "is_enrolled",
         ]
-
     def get_is_enrolled(self, obj):
         request = self.context.get("request")
         if not request or not hasattr(request.user, "studentprofile"):
             return False
-
         student = request.user.studentprofile
         return student.enrolled_courses.filter(id=obj.id).exists()
-
     def validate_title(self, value):
         request = self.context.get("request")
         user = getattr(request, "user", None)

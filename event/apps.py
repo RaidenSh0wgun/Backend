@@ -2,7 +2,7 @@ from django.apps import AppConfig
 
 
 class EventConfig(AppConfig):
-    name = 'event'
 
+    name = 'event'
     def ready(self):
-        import event.signals  # noqa: F401
+        import event.signals

@@ -6,7 +6,6 @@ class Migration(migrations.Migration):
     dependencies = [
         ("user", "0013_alter_instructorprofile_id_alter_studentprofile_id"),
     ]
-
     operations = [
         migrations.AddField(
             model_name="studentprofile",

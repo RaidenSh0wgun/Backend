@@ -28,7 +28,6 @@ def sync_quiz_deadline_to_calendar(sender, instance, created, **kwargs):
                 "related_course": course,
             },
         )
-
     if instance.author and instance.author.user_id:
         CalendarEvent.objects.update_or_create(
             user=instance.author.user,

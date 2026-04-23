@@ -4,7 +4,6 @@ from django.utils.translation import gettext_lazy as _
 from django.dispatch import receiver
 from django.db.models.signals import post_save
 
-
 SEX_CHOICES = [
     ("male", "Male"),
     ("female", "Female"),
@@ -23,7 +22,6 @@ class StudentProfile(models.Model):
     sex = models.CharField(max_length=20, choices=SEX_CHOICES, blank=True)
     avatar_url = models.ImageField(upload_to='avatars/', blank=True, null=True)
     email_verified = models.BooleanField(default=False)
-
     def __str__(self):
         return f"{self.user.username} - {self.user.id}"
 
@@ -39,17 +37,17 @@ class InstructorProfile(models.Model):
     sex = models.CharField(max_length=20, choices=SEX_CHOICES, blank=True)
     avatar_url = models.ImageField(upload_to='avatars/', blank=True, null=True)
     email_verified = models.BooleanField(default=False)
-
     def __str__(self):
-        return f"{self.user.username} - {self.user.id}" 
-    
-    
+        return f"{self.user.username} - {self.user.id}"
+
+
 @receiver(post_save, sender=User)
 def save_student_profile(sender, instance, **kwargs):
     try:
         instance.studentprofile.save()
     except StudentProfile.DoesNotExist:
         pass
+
 
 @receiver(post_save, sender=User)
 def save_instructor_profile(sender, instance, **kwargs):
