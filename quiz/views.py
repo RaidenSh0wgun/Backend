@@ -19,7 +19,6 @@ from .serializers import (
 
 
 def recalculate_attempt_scores(quiz_id):
-    """Recalculate scores for all attempts of a quiz."""
     attempts = QuizAttempt.objects.filter(quiz_id=quiz_id)
     for attempt in attempts:
         correct = 0
@@ -56,7 +55,6 @@ def recalculate_attempt_scores(quiz_id):
                     if correct_text and str(user_answer).strip().lower() == correct_text.lower():
                         correct += 1
             else:
-                # MCQ or TF
                 try:
                     answer_id = int(user_answer)
                     selected = question.answers.filter(id=answer_id).first()
@@ -156,7 +154,6 @@ class QuizQuestionDetail(APIView):
         if serializer.is_valid():
             serializer.save()
             
-            # Recalculate scores for all attempts of this quiz
             recalculate_attempt_scores(quiz_id)
             
             return Response(
@@ -260,8 +257,6 @@ class SubmitQuiz(APIView):
                     score += 1
                 continue
 
-            # Multiple choice and True/False are scored by which answer option
-            # the student selected (via answer id).
             try:
                 selected_answer_id = int(submitted_value)
             except (TypeError, ValueError):
@@ -283,14 +278,12 @@ class SubmitQuiz(APIView):
             answers=answers_map,
         )
 
-        # Clear in-progress timer when attempt is submitted.
         cache.delete(f"quiz_timer_start_{student.id}_{quiz.id}")
 
         return Response({"score": attempt.score, "total": attempt.total})
 
 
 class QuizTimerView(APIView):
-    """Server-backed quiz timer (doesn't reset when navigating away)."""
 
     permission_classes = [permissions.IsAuthenticated]
 
@@ -308,7 +301,6 @@ class QuizTimerView(APIView):
 
         if start_ts is None:
             start_ts = now_ts
-            # Keep the timer around longer than quiz duration.
             timeout = quiz.duration_minutes * 60 + 60 * 24
             cache.set(cache_key, start_ts, timeout=timeout)
 
@@ -326,11 +318,6 @@ class QuizTimerView(APIView):
 
 
 class QuizAttemptsView(APIView):
-    """List quiz attempts (scores) for a quiz.
-
-    - Instructors can view all attempts for quizzes they created.
-    - Students can view only their own attempt.
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, quiz_id, format=None):
@@ -355,11 +342,6 @@ class QuizAttemptsView(APIView):
 
 
 class QuizAttemptDetail(APIView):
-    """Retrieve or update a single quiz attempt.
-
-    - Instructors can view any attempt for their quizzes.
-    - Students can view their own attempt.
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self, quiz_id, attempt_id):
@@ -392,19 +374,16 @@ class QuizAttemptDetail(APIView):
         if serializer.is_valid():
             updated_attempt = serializer.save()
             
-            # Recalculate score if answers were changed
             if "answers" in request.data:
                 recalculate_attempt_scores(quiz_id)
-                # Refresh attempt from DB
                 attempt = QuizAttempt.objects.get(id=attempt_id)
             
-            # Return updated attempt with recalculated score
+            
             return Response(QuizAttemptSerializer(attempt).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class PendingQuizzesView(APIView):
-    """List quizzes the current student has not attempted yet (from enrolled courses)."""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, format=None):
@@ -421,13 +400,6 @@ class PendingQuizzesView(APIView):
 
 
 class QuizViewDetail(APIView):
-    """Quiz landing page data.
-
-    Used by the student/teacher `quizview` screen:
-    - quiz details (title/description/duration/question_count/has_attempted)
-    - current student's attempt score (if the viewer is a student and has attempted)
-    """
-
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, quiz_id, format=None):
@@ -454,7 +426,6 @@ class QuizViewDetail(APIView):
 
 
 class AttemptedQuizzesView(APIView):
-    """List quizzes the current student has already attempted."""
 
     permission_classes = [permissions.IsAuthenticated]
 
@@ -480,11 +451,6 @@ class AttemptedQuizzesView(APIView):
 
 
 class CalendarQuizzesView(APIView):
-    """List quizzes with due dates for calendar display.
-
-    Students see quizzes from enrolled courses.
-    Teachers see quizzes they authored.
-    """
 
     permission_classes = [permissions.IsAuthenticated]
 

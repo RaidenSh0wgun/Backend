@@ -69,7 +69,6 @@ class CourseList(generics.ListAPIView):
 
 
 class EnrolledCoursesList(APIView):
-    """List courses the current student is enrolled in."""
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = PageNumberPagination
 
@@ -112,7 +111,7 @@ class EnrollCourseView(APIView):
         student = request.user.studentprofile
         student.enrolled_courses.add(course)
 
-        # Sync existing quiz deadlines into the student's calendar on enroll
+        # on enroll, this creates calendar events for all quizzes in the course that have due dates.
         try:
             from event.models import CalendarEvent
         except Exception:
@@ -144,8 +143,7 @@ class EnrollCourseView(APIView):
         course = get_object_or_404(Course, pk=pk)
         student = request.user.studentprofile
         student.enrolled_courses.remove(course)
-
-        # Remove calendar events for quizzes in this course on unenroll
+        
         try:
             from event.models import CalendarEvent
         except Exception:

@@ -14,12 +14,11 @@ def normalize_answer(text, format_type):
         return text.lower()
     elif format_type == 'capitalize':
         return text.capitalize()
-    else:  # exact
+    else:  # exact or any other unrecognized format
         return text
 
 
 def recalculate_attempt_scores(quiz_id):
-    """Recalculate scores for all attempts of a quiz."""
     from collections import Counter
     
     attempts = QuizAttempt.objects.filter(quiz_id=quiz_id)
@@ -61,7 +60,6 @@ def recalculate_attempt_scores(quiz_id):
                     if correct_normalized and user_normalized == correct_normalized:
                         correct += 1
             else:
-                # MCQ or TF
                 try:
                     answer_id = int(user_answer)
                     selected = question.answers.filter(id=answer_id).first()
@@ -102,8 +100,6 @@ class QuestionSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        # Because `choices` uses `source="answers"`, DRF stores the validated
-        # nested payload under the source key (`answers`) in `validated_data`.
         choices_data = validated_data.pop("answers", validated_data.pop("choices", []))
         question = Question.objects.create(**validated_data)
 
@@ -258,7 +254,6 @@ class QuizCreateUpdateSerializer(serializers.ModelSerializer):
             for choice_data in choices_data:
                 Answer.objects.create(Question=question, **choice_data)
 
-        # Recalculate scores for all attempts since questions changed
         recalculate_attempt_scores(instance.id)
 
         return instance

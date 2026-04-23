@@ -580,10 +580,6 @@ class PasswordResetConfirmView(APIView):
 
 
 class PublicUserProfileView(APIView):
-    """
-    Public API endpoint to view any user's profile by username.
-    Accessible to all users (authenticated or not).
-    """
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, username):
@@ -595,7 +591,6 @@ class PublicUserProfileView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Build the response data
         data = {
             "id": user.id,
             "username": user.username,
@@ -607,7 +602,6 @@ class PublicUserProfileView(APIView):
             "avatar_url": "",
         }
 
-        # Get role and profile-specific data
         if user.is_superuser:
             data["role"] = "admin"
         elif hasattr(user, "instructorprofile"):

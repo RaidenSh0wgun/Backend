@@ -1,8 +1,5 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-# from autoslug import AutoSlugField
-
-
 
 # Create your models here.
 class Quiz(models.Model):
@@ -101,7 +98,6 @@ class QuizAttempt(models.Model):
 
     @property
     def effective_score(self):
-        """Return override score if set, otherwise auto-calculated score"""
         if self.score_override is not None:
             return self.score_override
         return self.score
