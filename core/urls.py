@@ -21,6 +21,7 @@ from quiz.views import (
     AttemptedQuizzesView,
     CalendarQuizzesView,
     QuizTimerView,
+    QuizActivityLogView,
 )
 
 from user.views import (
@@ -82,6 +83,11 @@ urlpatterns = [
         "api/quizzes/<int:quiz_id>/timer/",
         QuizTimerView.as_view(),
         name="quiz_timer",
+    ),
+    path(
+        "api/quizzes/<int:quiz_id>/activity/",
+        QuizActivityLogView.as_view(),
+        name="quiz_activity_log",
     ),
     path("api/courses/", CourseListCreate.as_view(), name="course_list_create"),
     path("api/courses/<int:pk>/", CourseRetrieveUpdateDestroy.as_view(), name="course_retrieve_update_destroy",),

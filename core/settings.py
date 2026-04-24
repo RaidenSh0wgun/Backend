@@ -136,8 +136,13 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 MEDIA_URL = '/media/'
-
 MEDIA_ROOT = BASE_DIR / 'media'
+
+DEFAULT_FILE_STORAGE = 'core.storage.GoogleDriveStorage'
+
+FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
 
 ACCOUNT_LOGIN_METHODS = {'email'}
 

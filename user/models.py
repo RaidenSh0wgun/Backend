@@ -20,7 +20,7 @@ class StudentProfile(models.Model):
     )
     full_name = models.CharField(max_length=255, blank=True)
     sex = models.CharField(max_length=20, choices=SEX_CHOICES, blank=True)
-    avatar_url = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    avatar_url = models.ImageField(blank=True, null=True)
     email_verified = models.BooleanField(default=False)
     def __str__(self):
         return f"{self.user.username} - {self.user.id}"
@@ -35,10 +35,26 @@ class InstructorProfile(models.Model):
     full_name = models.CharField(max_length=255, blank=True)
     bio = models.TextField(blank=True)
     sex = models.CharField(max_length=20, choices=SEX_CHOICES, blank=True)
-    avatar_url = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    avatar_url = models.ImageField(blank=True, null=True)
     email_verified = models.BooleanField(default=False)
     def __str__(self):
         return f"{self.user.username} - {self.user.id}"
+
+
+class SecurityAuditLog(models.Model):
+    ACTION_CHOICES = [
+        ("role_change", "Role Change"),
+        ("role_switch_attempt", "Role Switch Attempt"),
+        ("media_upload", "Media Upload"),
+        ("email_verification_request", "Email Verification Request"),
+    ]
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="security_logs")
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    detail = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    def __str__(self):
+        return f"{self.action} - {self.user_id or 'anonymous'}"
 
 
 @receiver(post_save, sender=User)

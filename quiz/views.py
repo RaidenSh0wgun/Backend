@@ -66,6 +66,23 @@ def recalculate_attempt_scores(quiz_id):
         attempt.save(update_fields=["score", "total"])
 
 
+def ensure_quiz_available_for_student(quiz):
+    if not quiz.is_active:
+        raise PermissionDenied("This quiz is not active.")
+    if quiz.course_id and hasattr(quiz, "course") and not quiz.course.is_active:
+        raise PermissionDenied("This course is not active.")
+    if quiz.due_date and timezone.now() > quiz.due_date:
+        raise PermissionDenied("This quiz is no longer available.")
+
+
+def assert_quiz_modification_allowed(user, quiz):
+    if user.is_superuser:
+        return
+    if hasattr(user, "instructorprofile") and quiz.author_id == user.instructorprofile.id:
+        return
+    raise PermissionDenied("Only the quiz author or administrators can modify this quiz.")
+
+
 class ListCreateQuiz(generics.ListCreateAPIView):
     queryset = Quiz.objects.all()
     permission_classes = [permissions.IsAuthenticated]
@@ -81,7 +98,7 @@ class ListCreateQuiz(generics.ListCreateAPIView):
         user = self.request.user
         if hasattr(user, "instructorprofile"):
             return qs.filter(author=user.instructorprofile)
-        return qs
+        return qs.filter(is_active=True, course__is_active=True)
     def perform_create(self, serializer):
         user = self.request.user
         instructor = getattr(user, "instructorprofile", None)
@@ -111,8 +128,16 @@ class RetrieveUpdateDestroyQuiz(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method == "GET":
             return QuizDetailSerializer
         return QuizCreateUpdateSerializer
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return super().get_queryset()
+        if hasattr(user, "instructorprofile"):
+            return super().get_queryset().filter(author=user.instructorprofile)
+        return super().get_queryset().filter(is_active=True, course__is_active=True)
     def perform_update(self, serializer):
         quiz = serializer.save()
+        assert_quiz_modification_allowed(self.request.user, quiz)
         if quiz.course_id and quiz.due_date:
             recipients = [
                 student.user.email
@@ -127,6 +152,9 @@ class RetrieveUpdateDestroyQuiz(generics.RetrieveUpdateDestroyAPIView):
                     recipient_list=recipients,
                     fail_silently=True,
                 )
+    def perform_destroy(self, instance):
+        assert_quiz_modification_allowed(self.request.user, instance)
+        instance.delete()
 
 
 class QuizQuestions(APIView):
@@ -137,6 +165,7 @@ class QuizQuestions(APIView):
         return Response(serializer.data)
     def post(self, request, quiz_id, format=None):
         quiz = get_object_or_404(Quiz, id=quiz_id)
+        assert_quiz_modification_allowed(request.user, quiz)
         serializer = QuestionSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(quiz=quiz)
@@ -160,6 +189,7 @@ class QuizQuestionDetail(APIView):
         return Response(serializer.data)
     def patch(self, request, pk, format=None):
         question = self.get_object(pk)
+        assert_quiz_modification_allowed(request.user, question.quiz)
         quiz_id = question.quiz_id
         serializer = QuestionSerializer(
             question, data=request.data, partial=True
@@ -176,6 +206,7 @@ class QuizQuestionDetail(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     def delete(self, request, pk, format=None):
         question = self.get_object(pk)
+        assert_quiz_modification_allowed(request.user, question.quiz)
         question.delete()
         return Response(
             {"message": "Question deleted successfully"},
@@ -197,6 +228,7 @@ class SubmitQuiz(APIView):
         if not hasattr(user, "studentprofile"):
             raise PermissionDenied("Only students can submit quizzes.")
         student = user.studentprofile
+        ensure_quiz_available_for_student(quiz)
         if QuizAttempt.objects.filter(student=student, quiz=quiz).exists():
             return Response(
                 {"detail": "You have already completed this quiz."},
@@ -271,6 +303,11 @@ class SubmitQuiz(APIView):
             total=total_points,
             answers=answers_map,
         )
+        Quiz.objects.get(id=quiz.id).activity_logs.create(
+            student=student,
+            action="submit",
+            metadata={"score": score, "total": total_points},
+        )
         cache.delete(f"quiz_timer_start_{student.id}_{quiz.id}")
         if user.email:
             score_text = f"{attempt.score}/{attempt.total}"
@@ -292,6 +329,7 @@ class QuizTimerView(APIView):
         if not hasattr(request.user, "studentprofile"):
             raise PermissionDenied("Only students can take quiz timers.")
         student = request.user.studentprofile
+        ensure_quiz_available_for_student(quiz)
         cache_key = f"quiz_timer_start_{student.id}_{quiz.id}"
         start_ts = cache.get(cache_key)
         now_ts = timezone.now().timestamp()
@@ -373,17 +411,42 @@ class PendingQuizzesView(APIView):
         enrolled_course_ids = student.enrolled_courses.values_list("id", flat=True)
         attempted_quiz_ids = QuizAttempt.objects.filter(student=student).values_list("quiz_id", flat=True)
         quizzes = Quiz.objects.filter(
-            course_id__in=enrolled_course_ids
+            course_id__in=enrolled_course_ids,
+            is_active=True,
+            course__is_active=True,
         ).exclude(id__in=attempted_quiz_ids).select_related("course").order_by("due_date")
         serializer = QuizSerializer(quizzes, many=True, context={"request": request})
         return Response(serializer.data)
+
+
+class QuizActivityLogView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    def post(self, request, quiz_id, format=None):
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+        if not hasattr(request.user, "studentprofile"):
+            raise PermissionDenied("Only students can log quiz activity.")
+        student = request.user.studentprofile
+        action = str(request.data.get("action") or "").strip().lower()
+        allowed = {"answer_change", "page_refresh", "focus_loss", "copy_paste", "screenshot", "tab_switch"}
+        if action not in allowed:
+            return Response({"detail": "Invalid activity action."}, status=status.HTTP_400_BAD_REQUEST)
+        metadata = request.data.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        quiz.activity_logs.create(
+            student=student,
+            action=action,
+            metadata=metadata,
+        )
+        return Response({"ok": True}, status=status.HTTP_201_CREATED)
 
 
 class QuizViewDetail(APIView):
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request, quiz_id, format=None):
         quiz = get_object_or_404(Quiz, id=quiz_id)
-        quiz_data = QuizSerializer(quiz, context={"request": request}).data
+        if hasattr(request.user, "studentprofile"):
+            ensure_quiz_available_for_student(quiz)
         attempt_payload = None
         if hasattr(request.user, "studentprofile"):
             student = request.user.studentprofile
@@ -398,6 +461,7 @@ class QuizViewDetail(APIView):
                     "effective_score": attempt.effective_score,
                     "created_at": attempt.created_at,
                 }
+        quiz_data = QuizSerializer(quiz, context={"request": request}).data
         return Response({"quiz": quiz_data, "attempt": attempt_payload})
 
 

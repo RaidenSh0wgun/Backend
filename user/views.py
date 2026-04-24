@@ -12,6 +12,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
+from django.core.cache import cache
 from .models import *
 from .serializers import (
     StudentProfileSerializer,
@@ -128,7 +129,7 @@ class RegisterView(APIView):
         username = request.data.get("username")
         email = request.data.get("email")
         password = request.data.get("password1") or request.data.get("password")
-        role = (request.data.get("role") or "student").strip().lower()
+        role = "student"
         full_name = request.data.get("full_name") or username
         if not username or not password:
             return Response(
@@ -184,6 +185,14 @@ class CurrentUserView(APIView):
         return Response(serializer.data)
     def patch(self, request):
         user = request.user
+        if "role" in request.data:
+            SecurityAuditLog.objects.create(
+                user=user,
+                action="role_switch_attempt",
+                detail="User attempted to change role through profile update.",
+                metadata={"requested_role": request.data.get("role")},
+            )
+            return Response({"detail": "Role updates are not allowed here."}, status=status.HTTP_403_FORBIDDEN)
         profile = get_user_profile(user)
         serializer = ProfileUpdateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -222,6 +231,16 @@ class CurrentUserView(APIView):
             profile.sex = str(sex).strip()
         if avatar_url is not None and profile is not None:
             profile.avatar_url = avatar_url
+            SecurityAuditLog.objects.create(
+                user=user,
+                action="media_upload",
+                detail="User uploaded a profile image.",
+                metadata={
+                    "filename": getattr(avatar_url, "name", ""),
+                    "size": getattr(avatar_url, "size", 0),
+                    "content_type": getattr(avatar_url, "content_type", ""),
+                },
+            )
         user.save()
         if profile is not None:
             if email_changed:
@@ -240,6 +259,12 @@ class EmailVerificationRequestView(APIView):
         email = request.data.get("email")
         if not email:
             return Response({"error": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+        cooldown_key = f"email_verification_cooldown:{str(email).strip().lower()}"
+        if cache.get(cooldown_key):
+            return Response(
+                {"message": "Please wait before requesting another verification email."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
@@ -249,6 +274,13 @@ class EmailVerificationRequestView(APIView):
             )
         frontend_url = request.data.get("frontend_url") or "http://localhost:5173"
         send_verification_email(user, frontend_url)
+        cache.set(cooldown_key, True, timeout=60)
+        SecurityAuditLog.objects.create(
+            user=user,
+            action="email_verification_request",
+            detail="Verification email requested.",
+            metadata={"email": email},
+        )
         return Response(
             {"message": "A verification email has been sent if the account exists."},
             status=status.HTTP_200_OK,
@@ -404,9 +436,23 @@ class AdminUserDetailView(APIView):
         if role is not None:
             role = str(role).strip().lower()
             if role == "teacher":
+                previous_role = "teacher" if hasattr(user, "instructorprofile") else "student"
                 promote_to_teacher(user)
+                SecurityAuditLog.objects.create(
+                    user=request.user,
+                    action="role_change",
+                    detail=f"Admin changed user {user.username} role to teacher.",
+                    metadata={"target_user_id": user.id, "from": previous_role, "to": "teacher"},
+                )
             elif role == "student":
+                previous_role = "teacher" if hasattr(user, "instructorprofile") else "student"
                 demote_to_student(user)
+                SecurityAuditLog.objects.create(
+                    user=request.user,
+                    action="role_change",
+                    detail=f"Admin changed user {user.username} role to student.",
+                    metadata={"target_user_id": user.id, "from": previous_role, "to": "student"},
+                )
             else:
                 return Response(
                     {"detail": "Invalid role."},

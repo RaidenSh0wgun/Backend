@@ -103,3 +103,22 @@ class QuizAttempt(models.Model):
         return self.score
     def __str__(self):
         return f"{self.student} - {self.quiz} ({self.effective_score}/{self.total})"
+
+
+class QuizActivityLog(models.Model):
+    ACTION_CHOICES = [
+        ("answer_change", "Answer Change"),
+        ("page_refresh", "Page Refresh"),
+        ("focus_loss", "Focus Loss"),
+        ("copy_paste", "Copy Paste"),
+        ("screenshot", "Screenshot"),
+        ("tab_switch", "Tab Switch"),
+        ("submit", "Submit"),
+    ]
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name="activity_logs")
+    student = models.ForeignKey("user.StudentProfile", on_delete=models.SET_NULL, null=True, blank=True, related_name="quiz_activity_logs")
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    def __str__(self):
+        return f"{self.quiz_id}:{self.action}:{self.student_id or 'unknown'}"

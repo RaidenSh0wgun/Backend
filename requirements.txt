@@ -10,6 +10,9 @@ django-filter==25.2
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 EbookLib==0.20
+google-api-python-client==2.154.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
 idna==3.11
 packaging==26.0
 pillow==12.0.0

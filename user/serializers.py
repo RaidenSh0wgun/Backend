@@ -4,6 +4,14 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from dj_rest_auth.registration.serializers import RegisterSerializer
 
+ALLOWED_IMAGE_MIME_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+}
+MAX_AVATAR_SIZE_BYTES = 50 * 1024 * 1024
+
 
 class ProfileUpdateSerializer(serializers.Serializer):
     username = serializers.CharField(required=False)
@@ -12,6 +20,15 @@ class ProfileUpdateSerializer(serializers.Serializer):
     bio = serializers.CharField(required=False, allow_blank=True)
     sex = serializers.ChoiceField(choices=SEX_CHOICES, required=False, allow_blank=True)
     avatar_url = serializers.ImageField(required=False, allow_null=True)
+    def validate_avatar_url(self, value):
+        if value is None:
+            return value
+        content_type = getattr(value, "content_type", "") or ""
+        if content_type not in ALLOWED_IMAGE_MIME_TYPES:
+            raise serializers.ValidationError("Unsupported image type.")
+        if getattr(value, "size", 0) > MAX_AVATAR_SIZE_BYTES:
+            raise serializers.ValidationError("Image exceeds 50MB limit.")
+        return value
 
 
 class CurrentUserSerializer(serializers.ModelSerializer):
@@ -74,6 +91,8 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             url = obj.studentprofile.avatar_url.url
         request = self.context.get("request") if hasattr(self, "context") else None
         if url and request is not None:
+            if url.startswith('http://') or url.startswith('https://'):
+                return url
             return request.build_absolute_uri(url)
         return url or ""
     def get_email_verified(self, obj):
@@ -115,9 +134,21 @@ class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
                 or user.is_staff
                 or user.groups.filter(name="Teachers").exists()
             ):
+                SecurityAuditLog.objects.create(
+                    user=user,
+                    action="role_switch_attempt",
+                    detail="User attempted to obtain a teacher token without teacher privileges.",
+                    metadata={"requested_role": role},
+                )
                 raise serializers.ValidationError({"detail": "User is not a teacher."})
         if role == "student":
             if not hasattr(user, "studentprofile"):
+                SecurityAuditLog.objects.create(
+                    user=user,
+                    action="role_switch_attempt",
+                    detail="User attempted to obtain a student token without student profile.",
+                    metadata={"requested_role": role},
+                )
                 raise serializers.ValidationError({"detail": "User is not a student."})
         return data
 
