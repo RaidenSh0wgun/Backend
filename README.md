@@ -56,7 +56,7 @@ Content-Type: application/json
 
 {
   "email": "user@example.com",
-  "frontend_url": "http://localhost:5173"  // optional, defaults to http://localhost:5173
+  "frontend_url": "http://localhost:5173"
 }
 ```
 
