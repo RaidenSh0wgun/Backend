@@ -60,13 +60,16 @@ def send_verification_email(user, frontend_url):
     {verify_link}
     If you did not request this, please ignore this email.
     """
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception:
+        pass
 
 
 def promote_to_teacher(user):
