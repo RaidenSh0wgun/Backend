@@ -151,7 +151,6 @@ class EnrollCourseView(APIView):
 
 class CourseEnrolledStudentsView(APIView):
 
-    """List students enrolled in a course. Instructor only."""
     permission_classes = [permissions.IsAuthenticated]
     def get(self, request, pk, format=None):
         if not hasattr(request.user, "instructorprofile"):
