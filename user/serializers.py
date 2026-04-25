@@ -202,6 +202,34 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "sex",
             "email_verified",
         )
+    def get_role(self, obj):
+        if obj.is_superuser:
+            return "admin"
+        if hasattr(obj, "instructorprofile"):
+            return "teacher"
+        if hasattr(obj, "studentprofile"):
+            return "student"
+        if obj.is_staff or obj.groups.filter(name="Teachers").exists():
+            return "teacher"
+        return "student"
+    def get_full_name(self, obj):
+        if hasattr(obj, "instructorprofile"):
+            return obj.instructorprofile.full_name
+        if hasattr(obj, "studentprofile"):
+            return obj.studentprofile.full_name
+        return obj.get_full_name() or obj.username
+    def get_sex(self, obj):
+        if hasattr(obj, "instructorprofile"):
+            return obj.instructorprofile.sex
+        if hasattr(obj, "studentprofile"):
+            return obj.studentprofile.sex
+        return ""
+    def get_email_verified(self, obj):
+        if hasattr(obj, "instructorprofile"):
+            return obj.instructorprofile.email_verified
+        if hasattr(obj, "studentprofile"):
+            return obj.studentprofile.email_verified
+        return False
 
 
 class ReportSerializer(serializers.ModelSerializer):
