@@ -11,6 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
+MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024
 
 class GoogleDriveStorage(Storage):
     def __init__(self):
@@ -50,9 +51,9 @@ class GoogleDriveStorage(Storage):
         try:
             service = self._get_service()
 
-            max_size = 52428800
+            max_size = MAX_UPLOAD_SIZE_BYTES
             if hasattr(content, 'size') and content.size > max_size:
-                raise ValueError("File size exceeds 50MB limit.")
+                raise ValueError("File size exceeds 50 MB limit.")
 
             if hasattr(content, 'seek'):
                 try:
