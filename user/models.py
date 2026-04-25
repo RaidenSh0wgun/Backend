@@ -57,6 +57,44 @@ class SecurityAuditLog(models.Model):
         return f"{self.action} - {self.user_id or 'anonymous'}"
 
 
+class Report(models.Model):
+    CATEGORY_CHOICES = [
+        ("bug", "Bug"),
+        ("problem", "Problem"),
+        ("feature", "Feature Request"),
+        ("other", "Other"),
+    ]
+    reporter = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="reports")
+    title = models.CharField(max_length=255)
+    description = models.TextField()
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def reporter_username(self):
+        return self.reporter.username if self.reporter else ""
+
+    @property
+    def reporter_email(self):
+        return self.reporter.email if self.reporter else ""
+
+    @property
+    def reporter_role(self):
+        if not self.reporter:
+            return ""
+        if self.reporter.is_superuser:
+            return "admin"
+        if hasattr(self.reporter, "instructorprofile"):
+            return "teacher"
+        return "student"
+
+    def __str__(self):
+        return f"{self.title} by {self.reporter_username or 'unknown'}"
+
+
 @receiver(post_save, sender=User)
 def save_student_profile(sender, instance, **kwargs):
     try:

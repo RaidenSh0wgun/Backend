@@ -202,30 +202,39 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "sex",
             "email_verified",
         )
-    def get_role(self, obj):
-        if obj.is_superuser:
-            return "admin"
-        if hasattr(obj, "instructorprofile"):
-            return "teacher"
-        return "student"
-    def get_full_name(self, obj):
-        if hasattr(obj, "instructorprofile"):
-            return obj.instructorprofile.full_name
-        if hasattr(obj, "studentprofile"):
-            return obj.studentprofile.full_name
-        return ""
-    def get_sex(self, obj):
-        if hasattr(obj, "instructorprofile"):
-            return obj.instructorprofile.sex
-        if hasattr(obj, "studentprofile"):
-            return obj.studentprofile.sex
-        return ""
-    def get_email_verified(self, obj):
-        if hasattr(obj, "instructorprofile"):
-            return obj.instructorprofile.email_verified
-        if hasattr(obj, "studentprofile"):
-            return obj.studentprofile.email_verified
-        return False
+
+
+class ReportSerializer(serializers.ModelSerializer):
+    reporter_username = serializers.SerializerMethodField()
+    reporter_email = serializers.SerializerMethodField()
+    reporter_role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Report
+        fields = (
+            "id",
+            "title",
+            "description",
+            "category",
+            "created_at",
+            "reporter_username",
+            "reporter_email",
+            "reporter_role",
+        )
+
+    def get_reporter_username(self, obj):
+        return obj.reporter_username
+
+    def get_reporter_email(self, obj):
+        return obj.reporter_email
+
+    def get_reporter_role(self, obj):
+        return obj.reporter_role
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        return Report.objects.create(reporter=user, **validated_data)
 
 
 class StudentProfileSerializer(serializers.ModelSerializer):

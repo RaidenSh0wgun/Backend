@@ -21,6 +21,7 @@ from .serializers import (
     ProfileUpdateSerializer,
     RoleTokenObtainPairSerializer,
     AdminUserSerializer,
+    ReportSerializer,
 )
 
 
@@ -474,6 +475,49 @@ class AdminUserDetailView(APIView):
             )
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ReportListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [permissions.IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
+    def get(self, request):
+        role = (request.query_params.get("role") or "all").strip().lower()
+        reports = Report.objects.select_related("reporter").prefetch_related(
+            "reporter__studentprofile",
+            "reporter__instructorprofile",
+            "reporter__groups",
+        ).order_by("-created_at")
+
+        if role == "teacher":
+            reports = reports.filter(
+                reporter__is_superuser=False,
+            ).filter(
+                Q(reporter__instructorprofile__isnull=False)
+                | Q(reporter__is_staff=True)
+                | Q(reporter__groups__name="Teachers")
+            ).distinct()
+        elif role == "student":
+            reports = reports.filter(
+                reporter__is_superuser=False,
+                reporter__studentprofile__isnull=False,
+            ).distinct()
+        elif role != "all":
+            return Response(
+                {"detail": "Invalid role filter."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ReportSerializer(reports, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = ReportSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class PasswordResetRequestView(APIView):
