@@ -342,7 +342,7 @@ class QuizTimerView(APIView):
         return Response(
             {
                 "started_at": datetime.fromtimestamp(
-                    float(start_ts), tz=timezone.utc
+                    float(start_ts), tz=timezone.get_current_timezone()
                 ).isoformat(),
                 "remaining_seconds": remaining_seconds,
             }
