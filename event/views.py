@@ -14,6 +14,8 @@ from .serializer import CalendarEventSerializer
 
 from quiz.models import Quiz, QuizAttempt
 
+from user.models import Report
+
 
 class MyCalendarView(generics.ListAPIView):
 
@@ -159,6 +161,20 @@ class NotificationsView(APIView):
                         "type": "submission_status",
                         "title": f"{attempt.student.user.username} submitted {attempt.quiz.title}",
                         "created_at": attempt.created_at.isoformat(),
+                    }
+                )
+        elif user.is_superuser:
+            reports = (
+                Report.objects.select_related("reporter")
+                .order_by("-created_at")[:10]
+            )
+            for report in reports:
+                notifications.append(
+                    {
+                        "channel": "in_app",
+                        "type": "admin_report",
+                        "title": f"Report from {report.reporter.username}: {report.title}",
+                        "created_at": report.created_at.isoformat(),
                     }
                 )
         notifications.sort(key=lambda item: item.get("created_at", ""), reverse=True)
