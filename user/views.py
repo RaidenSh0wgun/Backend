@@ -1,28 +1,41 @@
-from django.shortcuts import render
+from django.conf import settings
+from django.contrib.auth.models import Group, User
+from django.contrib.auth.tokens import default_token_generator
+from django.core.cache import cache
+from django.core.mail import send_mail
+from django.db.models import Q
+from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import generics, permissions, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
-from django.contrib.auth.models import Group, User
-from django.db.models import Q
-from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
-from django.conf import settings
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes, force_str
-from django.core.cache import cache
+
+from event.models import CalendarEvent
+from quiz.models import Quiz, QuizAttempt
+
 from .models import *
 from .serializers import (
-    StudentProfileSerializer,
-    InstructorProfileSerializer,
-    CurrentUserSerializer,
-    ProfileUpdateSerializer,
-    RoleTokenObtainPairSerializer,
     AdminUserSerializer,
+    CurrentUserSerializer,
+    InstructorProfileSerializer,
+    NotificationItemSerializer,
+    ProfileUpdateSerializer,
     ReportSerializer,
+    RoleTokenObtainPairSerializer,
+    StudentProfileSerializer,
 )
+
+
+def coerce_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"true", "1", "yes", "on"}
 
 
 def ensure_user_default_student(user):
@@ -106,12 +119,172 @@ def demote_to_student(user):
         )
 
 
+def build_notification_item(user, channel, source_type, source_id, title, created_at, metadata=None):
+    return NotificationItem.objects.update_or_create(
+        user=user,
+        channel=channel,
+        source_type=source_type,
+        source_id=str(source_id),
+        defaults={
+            "title": title,
+            "created_at": created_at,
+            "metadata": metadata or {},
+        },
+    )[0]
+
+
+def sync_notifications_for_user(user):
+    now = timezone.now()
+
+    if hasattr(user, "studentprofile"):
+        student = user.studentprofile
+        attempts = (
+            QuizAttempt.objects.filter(student=student)
+            .select_related("quiz")
+            .order_by("-created_at")[:10]
+        )
+        attempted_quiz_ids = QuizAttempt.objects.filter(student=student).values_list("quiz_id", flat=True)
+        pending_or_missed = (
+            Quiz.objects.filter(course__in=student.enrolled_courses.all())
+            .exclude(id__in=attempted_quiz_ids)
+            .select_related("course")
+            .order_by("due_date")[:10]
+        )
+
+        for attempt in attempts:
+            score_text = ""
+            if attempt.quiz.show_scores_after_quiz:
+                score_text = f" ({attempt.effective_score}/{attempt.total})"
+            build_notification_item(
+                user=user,
+                channel="in_app",
+                source_type="submission_status",
+                source_id=f"attempt-{attempt.id}",
+                title=f"Submitted: {attempt.quiz.title}{score_text}",
+                created_at=attempt.created_at,
+                metadata={
+                    "quiz_id": attempt.quiz_id,
+                    "attempt_id": attempt.id,
+                    "score": attempt.effective_score,
+                    "total": attempt.total,
+                },
+            )
+
+        for quiz in pending_or_missed:
+            if not quiz.due_date:
+                continue
+            status_label = "Missed" if quiz.due_date < now else "Pending"
+            build_notification_item(
+                user=user,
+                channel="in_app",
+                source_type="submission_status",
+                source_id=f"quiz-{quiz.id}",
+                title=f"{status_label}: {quiz.title}",
+                created_at=quiz.due_date,
+                metadata={
+                    "quiz_id": quiz.id,
+                    "course_id": quiz.course_id,
+                    "status": status_label,
+                },
+            )
+
+        events = (
+            CalendarEvent.objects.filter(user=user, event_type="quiz_due")
+            .order_by("start")[:10]
+        )
+        for event in events:
+            build_notification_item(
+                user=user,
+                channel="in_app",
+                source_type="calendar_deadline",
+                source_id=f"event-{event.id}",
+                title=event.title,
+                created_at=event.start,
+                metadata={
+                    "event_id": event.id,
+                    "quiz_id": event.related_quiz_id,
+                    "course_id": event.related_course_id,
+                },
+            )
+
+    elif hasattr(user, "instructorprofile"):
+        instructor = user.instructorprofile
+        quizzes = (
+            Quiz.objects.filter(author=instructor, due_date__isnull=False)
+            .select_related("course")
+            .order_by("due_date")[:10]
+        )
+        for quiz in quizzes:
+            build_notification_item(
+                user=user,
+                channel="in_app",
+                source_type="calendar_deadline",
+                source_id=f"quiz-{quiz.id}",
+                title=f"Quiz due: {quiz.title}",
+                created_at=quiz.due_date,
+                metadata={
+                    "quiz_id": quiz.id,
+                    "course_id": quiz.course_id,
+                },
+            )
+
+        attempts = (
+            QuizAttempt.objects.filter(quiz__author=instructor)
+            .select_related("quiz", "student__user")
+            .order_by("-created_at")[:10]
+        )
+        for attempt in attempts:
+            build_notification_item(
+                user=user,
+                channel="in_app",
+                source_type="submission_status",
+                source_id=f"attempt-{attempt.id}",
+                title=f"{attempt.student.user.username} submitted {attempt.quiz.title}",
+                created_at=attempt.created_at,
+                metadata={
+                    "quiz_id": attempt.quiz_id,
+                    "attempt_id": attempt.id,
+                    "student_id": attempt.student_id,
+                },
+            )
+
+    elif user.is_superuser:
+        reports = (
+            Report.objects.select_related("reporter")
+            .order_by("-created_at")[:10]
+        )
+        for report in reports:
+            reporter_name = report.reporter.username if report.reporter else "Unknown user"
+            build_notification_item(
+                user=user,
+                channel="in_app",
+                source_type="admin_report",
+                source_id=f"report-{report.id}",
+                title=f"Report from {reporter_name}: {report.title}",
+                created_at=report.created_at,
+                metadata={
+                    "report_id": report.id,
+                    "reporter_id": report.reporter_id,
+                },
+            )
+
+
+def get_visible_notifications(user):
+    sync_notifications_for_user(user)
+    return NotificationItem.objects.filter(
+        user=user,
+        channel="in_app",
+        is_removed=False,
+    ).order_by("-created_at")
+
+
 class StudentProfileView(generics.RetrieveUpdateAPIView):
     queryset = StudentProfile.objects.all()
     serializer_class = StudentProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
+
     def get_queryset(self):
-        queryset = super().get_queryset().order_by('user_id')
+        queryset = super().get_queryset().order_by("user_id")
         return queryset
 
 
@@ -119,13 +292,15 @@ class InstructorProfileView(generics.RetrieveUpdateAPIView):
     queryset = InstructorProfile.objects.all()
     serializer_class = InstructorProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
+
     def get_queryset(self):
-        queryset = super().get_queryset().order_by('user_id')
+        queryset = super().get_queryset().order_by("user_id")
         return queryset
 
 
 class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
+
     def post(self, request):
         username = request.data.get("username")
         email = request.data.get("email")
@@ -180,10 +355,12 @@ class RegisterView(APIView):
 class CurrentUserView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+
     def get(self, request):
         ensure_user_default_student(request.user)
         serializer = CurrentUserSerializer(request.user, context={"request": request})
         return Response(serializer.data)
+
     def patch(self, request):
         user = request.user
         if "role" in request.data:
@@ -230,18 +407,23 @@ class CurrentUserView(APIView):
             profile.bio = str(bio).strip()
         if sex is not None and profile is not None:
             profile.sex = str(sex).strip()
-        if avatar_url is not None and profile is not None:
-            profile.avatar_url = avatar_url
-            SecurityAuditLog.objects.create(
-                user=user,
-                action="media_upload",
-                detail="User uploaded a profile image.",
-                metadata={
-                    "filename": getattr(avatar_url, "name", ""),
-                    "size": getattr(avatar_url, "size", 0),
-                    "content_type": getattr(avatar_url, "content_type", ""),
-                },
-            )
+        if "avatar_url" in serializer.validated_data and profile is not None:
+            if profile.avatar_url:
+                profile.avatar_url.delete(save=False)
+            if avatar_url:
+                profile.avatar_url = avatar_url
+                SecurityAuditLog.objects.create(
+                    user=user,
+                    action="media_upload",
+                    detail="User uploaded a profile image.",
+                    metadata={
+                        "filename": getattr(avatar_url, "name", ""),
+                        "size": getattr(avatar_url, "size", 0),
+                        "content_type": getattr(avatar_url, "content_type", ""),
+                    },
+                )
+            else:
+                profile.avatar_url = None
         user.save()
         if profile is not None:
             if email_changed:
@@ -256,6 +438,7 @@ class CurrentUserView(APIView):
 
 class EmailVerificationRequestView(APIView):
     permission_classes = [permissions.AllowAny]
+
     def post(self, request):
         email = request.data.get("email")
         if not email:
@@ -290,6 +473,7 @@ class EmailVerificationRequestView(APIView):
 
 class EmailVerificationConfirmView(APIView):
     permission_classes = [permissions.AllowAny]
+
     def post(self, request):
         uid = request.data.get("uid")
         token = request.data.get("token")
@@ -314,8 +498,8 @@ class RoleTokenObtainPairView(TokenObtainPairView):
 
 
 class ChangeUserGroupView(generics.ListAPIView):
-
     permission_classes = [permissions.IsAdminUser]
+
     def post(self, request):
         username = request.data.get("username")
         group_name = request.data.get("group")
@@ -339,6 +523,7 @@ class ChangeUserGroupView(generics.ListAPIView):
 
 class AdminUserListView(APIView):
     permission_classes = [permissions.IsAdminUser]
+
     def get(self, request):
         search = (request.query_params.get("search") or "").strip()
         role = (request.query_params.get("role") or "student").strip().lower()
@@ -369,8 +554,10 @@ class AdminUserListView(APIView):
 
 class AdminUserDetailView(APIView):
     permission_classes = [permissions.IsAdminUser]
+
     def get_object(self, user_id):
         return User.objects.get(id=user_id)
+
     def get(self, request, user_id):
         try:
             user = self.get_object(user_id)
@@ -378,6 +565,7 @@ class AdminUserDetailView(APIView):
             return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = AdminUserSerializer(user)
         return Response(serializer.data)
+
     def patch(self, request, user_id):
         try:
             user = self.get_object(user_id)
@@ -394,6 +582,7 @@ class AdminUserDetailView(APIView):
         password = request.data.get("password")
         is_active = request.data.get("is_active")
         role = request.data.get("role")
+        email_verified = request.data.get("email_verified")
         if username is not None:
             username = str(username).strip()
             if not username:
@@ -416,7 +605,7 @@ class AdminUserDetailView(APIView):
                 )
             user.email = email
         if is_active is not None:
-            user.is_active = bool(is_active)
+            user.is_active = coerce_bool(is_active)
         if password is not None:
             password = str(password)
             if len(password) < 8:
@@ -434,6 +623,14 @@ class AdminUserDetailView(APIView):
                 ensure_user_default_student(user)
                 user.studentprofile.full_name = full_name
                 user.studentprofile.save(update_fields=["full_name"])
+        if email_verified is not None:
+            profile = get_user_profile(user)
+            if profile is None:
+                ensure_user_default_student(user)
+                profile = get_user_profile(user)
+            if profile is not None:
+                profile.email_verified = coerce_bool(email_verified)
+                profile.save(update_fields=["email_verified"])
         if role is not None:
             role = str(role).strip().lower()
             if role == "teacher":
@@ -459,10 +656,13 @@ class AdminUserDetailView(APIView):
                     {"detail": "Invalid role."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+        user.refresh_from_db()
         user.save()
         ensure_user_default_student(user)
+        user.refresh_from_db()
         serializer = AdminUserSerializer(user)
         return Response(serializer.data)
+
     def delete(self, request, user_id):
         try:
             user = self.get_object(user_id)
@@ -485,11 +685,16 @@ class ReportListCreateView(APIView):
 
     def get(self, request):
         role = (request.query_params.get("role") or "all").strip().lower()
-        reports = Report.objects.select_related("reporter").prefetch_related(
-            "reporter__studentprofile",
-            "reporter__instructorprofile",
-            "reporter__groups",
-        ).order_by("-created_at")
+        reports = (
+            Report.objects.select_related("reporter")
+            .prefetch_related(
+                "reporter__studentprofile",
+                "reporter__instructorprofile",
+                "reporter__groups",
+            )
+            .filter(is_removed=False)
+            .order_by("-created_at")
+        )
 
         if role == "teacher":
             reports = reports.filter(
@@ -520,10 +725,147 @@ class ReportListCreateView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+class ReportDetailView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_object(self, report_id):
+        return Report.objects.select_related("reporter").get(id=report_id)
+
+    def patch(self, request, report_id):
+        try:
+            report = self.get_object(report_id)
+        except Report.DoesNotExist:
+            return Response({"detail": "Report not found."}, status=status.HTTP_404_NOT_FOUND)
+        if report.is_removed:
+            return Response({"detail": "Report not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        is_resolved = request.data.get("is_resolved")
+        is_removed = request.data.get("is_removed")
+
+        if is_resolved is not None:
+            resolved = coerce_bool(is_resolved)
+            report.is_resolved = resolved
+            if resolved:
+                report.resolved_at = timezone.now()
+                report.resolved_by = request.user
+            else:
+                report.resolved_at = None
+                report.resolved_by = None
+
+        if is_removed is not None:
+            removed = coerce_bool(is_removed)
+            report.is_removed = removed
+            if removed:
+                report.removed_at = timezone.now()
+                report.removed_by = request.user
+            else:
+                report.removed_at = None
+                report.removed_by = None
+
+        report.save()
+        serializer = ReportSerializer(report)
+        return Response(serializer.data)
+
+    def delete(self, request, report_id):
+        try:
+            report = self.get_object(report_id)
+        except Report.DoesNotExist:
+            return Response({"detail": "Report not found."}, status=status.HTTP_404_NOT_FOUND)
+        if report.is_removed:
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        report.is_removed = True
+        report.removed_at = timezone.now()
+        report.removed_by = request.user
+        report.save(update_fields=["is_removed", "removed_at", "removed_by"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class NotificationsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        visible_notifications = get_visible_notifications(request.user)
+        serialized_notifications = NotificationItemSerializer(visible_notifications, many=True)
+        unread_count = visible_notifications.filter(is_read=False).count()
+        return Response(
+            {
+                "email": [
+                    {
+                        "type": "invitation",
+                        "title": "Invitations",
+                    },
+                    {
+                        "type": "reminder",
+                        "title": "Reminders",
+                    },
+                    {
+                        "type": "result_publication",
+                        "title": "Result publications",
+                    },
+                ],
+                "in_app": serialized_notifications.data,
+                "unread_count": unread_count,
+            }
+        )
+
+    def patch(self, request):
+        updated_count = NotificationItem.objects.filter(
+            user=request.user,
+            channel="in_app",
+            is_removed=False,
+            is_read=False,
+        ).update(is_read=True)
+        return Response({"updated": updated_count})
+
+    def delete(self, request):
+        removed_count = NotificationItem.objects.filter(
+            user=request.user,
+            channel="in_app",
+            is_removed=False,
+        ).update(is_removed=True)
+        return Response({"removed": removed_count})
+
+
+class NotificationDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self, request, notification_id):
+        return NotificationItem.objects.get(
+            id=notification_id,
+            user=request.user,
+            channel="in_app",
+        )
+
+    def patch(self, request, notification_id):
+        try:
+            notification = self.get_object(request, notification_id)
+        except NotificationItem.DoesNotExist:
+            return Response({"detail": "Notification not found."}, status=status.HTTP_404_NOT_FOUND)
+        if notification.is_removed:
+            return Response({"detail": "Notification not found."}, status=status.HTTP_404_NOT_FOUND)
+        is_read = request.data.get("is_read")
+        if is_read is not None:
+            notification.is_read = coerce_bool(is_read)
+            notification.save(update_fields=["is_read"])
+        serializer = NotificationItemSerializer(notification)
+        return Response(serializer.data)
+
+    def delete(self, request, notification_id):
+        try:
+            notification = self.get_object(request, notification_id)
+        except NotificationItem.DoesNotExist:
+            return Response({"detail": "Notification not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not notification.is_removed:
+            notification.is_removed = True
+            notification.save(update_fields=["is_removed"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class PasswordResetRequestView(APIView):
     permission_classes = [permissions.AllowAny]
+
     def post(self, request):
-        email = request.data.get('email')
+        email = request.data.get("email")
         if not email:
             return Response(
                 {"error": "Email is required"},
@@ -537,7 +879,7 @@ class PasswordResetRequestView(APIView):
                 status=status.HTTP_200_OK
             )
         profile = get_user_profile(user)
-        frontend_url = request.data.get('frontend_url', 'http://localhost:5173')
+        frontend_url = request.data.get("frontend_url", "http://localhost:5173")
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
         reset_link = f"{frontend_url}/reset-password/{uid}/{token}/"
@@ -567,10 +909,11 @@ class PasswordResetRequestView(APIView):
 
 class PasswordResetConfirmView(APIView):
     permission_classes = [permissions.AllowAny]
+
     def post(self, request):
-        uid = request.data.get('uid')
-        token = request.data.get('token')
-        new_password = request.data.get('new_password')
+        uid = request.data.get("uid")
+        token = request.data.get("token")
+        new_password = request.data.get("new_password")
         if not all([uid, token, new_password]):
             return Response(
                 {"error": "UID, token, and new_password are required"},
@@ -599,6 +942,7 @@ class PasswordResetConfirmView(APIView):
 
 class PublicUserProfileView(APIView):
     permission_classes = [permissions.AllowAny]
+
     def get(self, request, username):
         try:
             user = User.objects.get(username=username)

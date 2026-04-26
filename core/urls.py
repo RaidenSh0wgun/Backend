@@ -31,14 +31,17 @@ from user.views import (
     AdminUserListView,
     AdminUserDetailView,
     ReportListCreateView,
+    ReportDetailView,
     PasswordResetRequestView,
     PasswordResetConfirmView,
     EmailVerificationRequestView,
     EmailVerificationConfirmView,
     PublicUserProfileView,
+    NotificationsView,
+    NotificationDetailView,
 )
 
-from event.views import MyCalendarView, NotificationsView
+from event.views import MyCalendarView
 
 from course.views import (
     CourseListCreate,
@@ -60,6 +63,7 @@ urlpatterns = [
     path("api/admin/users/", AdminUserListView.as_view(), name="admin_users"),
     path("api/admin/users/<int:user_id>/", AdminUserDetailView.as_view(), name="admin_user_detail"),
     path("api/reports/", ReportListCreateView.as_view(), name="reports"),
+    path("api/reports/<int:report_id>/", ReportDetailView.as_view(), name="report_detail"),
     path("api/auth/email/verify/", EmailVerificationRequestView.as_view(), name="email_verify"),
     path("api/auth/email/verify/confirm/", EmailVerificationConfirmView.as_view(), name="email_verify_confirm"),
     path("api/quizzes/", ListCreateQuiz.as_view(), name="quiz_list"),
@@ -100,6 +104,7 @@ urlpatterns = [
     path("api/courses/<int:pk>/students/", CourseEnrolledStudentsView.as_view(), name="course_enrolled_students",),
     path("api/events/", MyCalendarView.as_view(), name="my_calendar"),
     path("api/notifications/", NotificationsView.as_view(), name="notifications"),
+    path("api/notifications/<int:notification_id>/", NotificationDetailView.as_view(), name="notification_detail"),
     path("dj-rest-auth/registration/", include("dj_rest_auth.registration.urls")),
     path("dj-rest-auth/", include("dj_rest_auth.urls")),
     path("api/auth/password/reset/", PasswordResetRequestView.as_view(), name="password_reset"),

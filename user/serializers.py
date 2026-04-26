@@ -20,6 +20,7 @@ class ProfileUpdateSerializer(serializers.Serializer):
     bio = serializers.CharField(required=False, allow_blank=True)
     sex = serializers.ChoiceField(choices=SEX_CHOICES, required=False, allow_blank=True)
     avatar_url = serializers.ImageField(required=False, allow_null=True)
+
     def validate_avatar_url(self, value):
         if value is None:
             return value
@@ -40,6 +41,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     email_verified = serializers.SerializerMethodField()
     courses = serializers.SerializerMethodField()
     enrolled_courses = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = (
@@ -55,6 +57,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "courses",
             "enrolled_courses",
         )
+
     def get_role(self, obj):
         if obj.is_superuser:
             return "admin"
@@ -65,24 +68,28 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         if obj.is_staff or obj.groups.filter(name="Teachers").exists():
             return "teacher"
         return "student"
+
     def get_full_name(self, obj):
         if hasattr(obj, "instructorprofile"):
             return obj.instructorprofile.full_name
         if hasattr(obj, "studentprofile"):
             return obj.studentprofile.full_name
         return obj.get_full_name() or obj.username
+
     def get_bio(self, obj):
         if hasattr(obj, "instructorprofile"):
             return obj.instructorprofile.bio
         if hasattr(obj, "studentprofile"):
             return obj.studentprofile.bio
         return ""
+
     def get_sex(self, obj):
         if hasattr(obj, "instructorprofile"):
             return obj.instructorprofile.sex
         if hasattr(obj, "studentprofile"):
             return obj.studentprofile.sex
         return ""
+
     def get_avatar_url(self, obj):
         url = ""
         if hasattr(obj, "instructorprofile") and obj.instructorprofile.avatar_url:
@@ -91,20 +98,23 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             url = obj.studentprofile.avatar_url.url
         request = self.context.get("request") if hasattr(self, "context") else None
         if url and request is not None:
-            if url.startswith('http://') or url.startswith('https://'):
+            if url.startswith("http://") or url.startswith("https://"):
                 return url
             return request.build_absolute_uri(url)
         return url or ""
+
     def get_email_verified(self, obj):
         if hasattr(obj, "instructorprofile"):
             return obj.instructorprofile.email_verified
         if hasattr(obj, "studentprofile"):
             return obj.studentprofile.email_verified
         return False
+
     def get_courses(self, obj):
         if hasattr(obj, "instructorprofile"):
             return [course.title for course in obj.instructorprofile.assigned_courses.all()]
         return []
+
     def get_enrolled_courses(self, obj):
         if hasattr(obj, "studentprofile"):
             return [course.title for course in obj.studentprofile.enrolled_courses.all()]
@@ -113,6 +123,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
 
 class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
     role = serializers.CharField(required=False)
+
     def validate(self, attrs):
         data = super().validate(attrs)
         role = (self.initial_data.get("role") or "").strip().lower()
@@ -156,11 +167,13 @@ class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
 class CustomRegisterSerializer(RegisterSerializer):
     role = serializers.ChoiceField(choices=["student", "teacher"], required=False)
     full_name = serializers.CharField(required=False)
+
     def get_cleaned_data(self):
         data = super().get_cleaned_data()
         data["role"] = self.validated_data.get("role", "student")
         data["full_name"] = self.validated_data.get("full_name", "")
         return data
+
     def save(self, request):
         user = super().save(request)
         role = self.cleaned_data["role"]
@@ -190,6 +203,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     sex = serializers.SerializerMethodField()
     email_verified = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = (
@@ -202,6 +216,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "sex",
             "email_verified",
         )
+
     def get_role(self, obj):
         if obj.is_superuser:
             return "admin"
@@ -212,24 +227,43 @@ class AdminUserSerializer(serializers.ModelSerializer):
         if obj.is_staff or obj.groups.filter(name="Teachers").exists():
             return "teacher"
         return "student"
+
     def get_full_name(self, obj):
         if hasattr(obj, "instructorprofile"):
             return obj.instructorprofile.full_name
         if hasattr(obj, "studentprofile"):
             return obj.studentprofile.full_name
         return obj.get_full_name() or obj.username
+
     def get_sex(self, obj):
         if hasattr(obj, "instructorprofile"):
             return obj.instructorprofile.sex
         if hasattr(obj, "studentprofile"):
             return obj.studentprofile.sex
         return ""
+
     def get_email_verified(self, obj):
         if hasattr(obj, "instructorprofile"):
             return obj.instructorprofile.email_verified
         if hasattr(obj, "studentprofile"):
             return obj.studentprofile.email_verified
         return False
+
+
+class NotificationItemSerializer(serializers.ModelSerializer):
+    type = serializers.CharField(source="source_type")
+
+    class Meta:
+        model = NotificationItem
+        fields = (
+            "id",
+            "channel",
+            "type",
+            "title",
+            "created_at",
+            "is_read",
+            "metadata",
+        )
 
 
 class ReportSerializer(serializers.ModelSerializer):
@@ -245,6 +279,10 @@ class ReportSerializer(serializers.ModelSerializer):
             "description",
             "category",
             "created_at",
+            "is_resolved",
+            "is_removed",
+            "resolved_at",
+            "removed_at",
             "reporter_username",
             "reporter_email",
             "reporter_role",
@@ -268,10 +306,10 @@ class ReportSerializer(serializers.ModelSerializer):
 class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentProfile
-        fields = '__all__'
+        fields = "__all__"
 
 
 class InstructorProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = InstructorProfile
-        fields = '__all__'
+        fields = "__all__"

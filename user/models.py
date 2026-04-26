@@ -41,6 +41,29 @@ class InstructorProfile(models.Model):
         return f"{self.user.username} - {self.user.id}"
 
 
+class NotificationItem(models.Model):
+    CHANNEL_CHOICES = [
+        ("in_app", "In App"),
+        ("email", "Email"),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notification_items")
+    channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES, default="in_app")
+    source_type = models.CharField(max_length=50)
+    source_id = models.CharField(max_length=64)
+    title = models.CharField(max_length=255)
+    created_at = models.DateTimeField()
+    is_read = models.BooleanField(default=False)
+    is_removed = models.BooleanField(default=False)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        unique_together = ("user", "channel", "source_type", "source_id")
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.source_type}:{self.source_id} - {self.user.username}"
+
+
 class SecurityAuditLog(models.Model):
     ACTION_CHOICES = [
         ("role_change", "Role Change"),
@@ -69,6 +92,24 @@ class Report(models.Model):
     description = models.TextField()
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
+    is_resolved = models.BooleanField(default=False)
+    is_removed = models.BooleanField(default=False)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_reports",
+    )
+    removed_at = models.DateTimeField(null=True, blank=True)
+    removed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="removed_reports",
+    )
 
     class Meta:
         ordering = ["-created_at"]
