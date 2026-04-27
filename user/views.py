@@ -138,74 +138,75 @@ def sync_notifications_for_user(user):
 
     if hasattr(user, "studentprofile"):
         student = user.studentprofile
-        attempts = (
-            QuizAttempt.objects.filter(student=student)
-            .select_related("quiz")
-            .order_by("-created_at")[:10]
-        )
-        attempted_quiz_ids = QuizAttempt.objects.filter(student=student).values_list("quiz_id", flat=True)
-        pending_or_missed = (
-            Quiz.objects.filter(course__in=student.enrolled_courses.all())
-            .exclude(id__in=attempted_quiz_ids)
-            .select_related("course")
-            .order_by("due_date")[:10]
-        )
-
-        for attempt in attempts:
-            score_text = ""
-            if attempt.quiz.show_scores_after_quiz:
-                score_text = f" ({attempt.effective_score}/{attempt.total})"
-            build_notification_item(
-                user=user,
-                channel="in_app",
-                source_type="submission_status",
-                source_id=f"attempt-{attempt.id}",
-                title=f"Submitted: {attempt.quiz.title}{score_text}",
-                created_at=attempt.created_at,
-                metadata={
-                    "quiz_id": attempt.quiz_id,
-                    "attempt_id": attempt.id,
-                    "score": attempt.effective_score,
-                    "total": attempt.total,
-                },
+        if student.email_verified:
+            attempts = (
+                QuizAttempt.objects.filter(student=student)
+                .select_related("quiz")
+                .order_by("-created_at")[:10]
+            )
+            attempted_quiz_ids = QuizAttempt.objects.filter(student=student).values_list("quiz_id", flat=True)
+            pending_or_missed = (
+                Quiz.objects.filter(course__in=student.enrolled_courses.all())
+                .exclude(id__in=attempted_quiz_ids)
+                .select_related("course")
+                .order_by("due_date")[:10]
             )
 
-        for quiz in pending_or_missed:
-            if not quiz.due_date:
-                continue
-            status_label = "Missed" if quiz.due_date < now else "Pending"
-            build_notification_item(
-                user=user,
-                channel="in_app",
-                source_type="submission_status",
-                source_id=f"quiz-{quiz.id}",
-                title=f"{status_label}: {quiz.title}",
-                created_at=quiz.due_date,
-                metadata={
-                    "quiz_id": quiz.id,
-                    "course_id": quiz.course_id,
-                    "status": status_label,
-                },
-            )
+            for attempt in attempts:
+                score_text = ""
+                if attempt.quiz.show_scores_after_quiz:
+                    score_text = f" ({attempt.effective_score}/{attempt.total})"
+                build_notification_item(
+                    user=user,
+                    channel="in_app",
+                    source_type="submission_status",
+                    source_id=f"attempt-{attempt.id}",
+                    title=f"Submitted: {attempt.quiz.title}{score_text}",
+                    created_at=attempt.created_at,
+                    metadata={
+                        "quiz_id": attempt.quiz_id,
+                        "attempt_id": attempt.id,
+                        "score": attempt.effective_score,
+                        "total": attempt.total,
+                    },
+                )
 
-        events = (
-            CalendarEvent.objects.filter(user=user, event_type="quiz_due")
-            .order_by("start")[:10]
-        )
-        for event in events:
-            build_notification_item(
-                user=user,
-                channel="in_app",
-                source_type="calendar_deadline",
-                source_id=f"event-{event.id}",
-                title=event.title,
-                created_at=event.start,
-                metadata={
-                    "event_id": event.id,
-                    "quiz_id": event.related_quiz_id,
-                    "course_id": event.related_course_id,
-                },
+            for quiz in pending_or_missed:
+                if not quiz.due_date:
+                    continue
+                status_label = "Missed" if quiz.due_date < now else "Pending"
+                build_notification_item(
+                    user=user,
+                    channel="in_app",
+                    source_type="submission_status",
+                    source_id=f"quiz-{quiz.id}",
+                    title=f"{status_label}: {quiz.title}",
+                    created_at=quiz.due_date,
+                    metadata={
+                        "quiz_id": quiz.id,
+                        "course_id": quiz.course_id,
+                        "status": status_label,
+                    },
+                )
+
+            events = (
+                CalendarEvent.objects.filter(user=user, event_type="quiz_due")
+                .order_by("start")[:10]
             )
+            for event in events:
+                build_notification_item(
+                    user=user,
+                    channel="in_app",
+                    source_type="calendar_deadline",
+                    source_id=f"event-{event.id}",
+                    title=event.title,
+                    created_at=event.start,
+                    metadata={
+                        "event_id": event.id,
+                        "quiz_id": event.related_quiz_id,
+                        "course_id": event.related_course_id,
+                    },
+                )
 
     elif hasattr(user, "instructorprofile"):
         instructor = user.instructorprofile
